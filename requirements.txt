@@ -3,5 +3,5 @@ PyPDF2
 pdf2image
 pytesseract
 reportlab
-openai
+openai==0.28.0
 gunicorn
