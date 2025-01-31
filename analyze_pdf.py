@@ -176,5 +176,10 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     buffer.close()
     return pdf_data
 
+try:
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+except Exception as e:
+    return jsonify({"error": "Invalid PDF file"}), 400
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
