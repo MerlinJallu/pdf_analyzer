@@ -1,2 +1,1 @@
-web: python analyze_pdf.py
-worker: python analyze_pdf.py 
+web: gunicorn analyze_pdf:app
