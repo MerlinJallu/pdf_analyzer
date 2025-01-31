@@ -68,6 +68,10 @@ def analyze_pdf():
         # Décoder le PDF
         pdf_bytes = base64.b64decode(pdf_base64)
 
+        # Valider le fichier PDF
+        if not validate_pdf(pdf_bytes):
+            return jsonify({"error": "Invalid PDF file"}), 400
+
         # 1) Extraire le texte (PyPDF2 + fallback OCR)
         pdf_text = extract_text_with_fallback(pdf_bytes)
 
@@ -90,6 +94,17 @@ def analyze_pdf():
         logging.exception("Erreur inattendue")
         return jsonify({"error": str(e)}), 500
 
+def validate_pdf(pdf_data: bytes) -> bool:
+    """
+    Valide si un fichier est un PDF correct en tentant de le lire avec PyPDF2.
+    """
+    try:
+        PdfReader(io.BytesIO(pdf_data))
+        return True
+    except Exception as e:
+        logging.error(f"Validation échouée pour le fichier PDF : {e}")
+        return False
+
 def extract_text_with_fallback(pdf_data: bytes) -> str:
     """
     Tente d'extraire le texte via PyPDF2.
@@ -100,7 +115,6 @@ def extract_text_with_fallback(pdf_data: bytes) -> str:
     if not extracted_text.strip():
         logging.info("PyPDF2 returned no text; switching to OCR.")
         extracted_text = extract_text_ocr(pdf_data)
-        # S'il est toujours vide, c'est probablement un PDF vraiment illisible
         if not extracted_text.strip():
             logging.warning("OCR also returned no text. Document may be unextractable.")
 
@@ -124,11 +138,9 @@ def extract_text_ocr(pdf_data: bytes) -> str:
     """
     text_parts = []
     try:
-        # Convertir PDF en liste d'images
-        images = convert_from_bytes(pdf_data, dpi=300) 
-        # Pour chaque image, faire l'OCR
+        images = convert_from_bytes(pdf_data, dpi=300)
         for img in images:
-            ocr_text = pytesseract.image_to_string(img, lang="fra")  # ou lang="eng" si texte anglais
+            ocr_text = pytesseract.image_to_string(img, lang="fra")
             text_parts.append(ocr_text)
     except Exception as e:
         logging.error(f"Erreur d'extraction OCR : {e}")
@@ -175,11 +187,6 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     pdf_data = buffer.getvalue()
     buffer.close()
     return pdf_data
-
-try:
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-except Exception as e:
-    return jsonify({"error": "Invalid PDF file"}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
