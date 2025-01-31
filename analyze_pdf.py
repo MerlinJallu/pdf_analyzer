@@ -52,46 +52,50 @@ les coordonnées sont généralement sous forme d'adresse.
 
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
-    """
-    Reçoit un JSON du type { "pdf_base64": "<base64>" },
-    renvoie { "report_pdf_base64": "<base64>" }.
-    """
     try:
+        # Loguer la réception de la requête
+        logging.info("Requête reçue dans /analyze_pdf")
+        
+        # Vérifier et loguer le contenu du JSON reçu
         data = request.get_json()
-        if not data:
+        logging.info(f"Contenu reçu : {data}")
+
+        if not data or "pdf_base64" not in data:
+            logging.error("JSON invalide ou champ 'pdf_base64' manquant")
             return jsonify({"error": "Invalid JSON body"}), 400
 
-        pdf_base64 = data.get("pdf_base64")
-        if not pdf_base64:
-            return jsonify({"error": "Missing 'pdf_base64'"}), 400
+        pdf_base64 = data["pdf_base64"]
 
-        # Décoder le PDF
+        # Étape 1 : Décoder le PDF et loguer
         pdf_bytes = base64.b64decode(pdf_base64)
+        logging.info(f"PDF décodé avec succès (taille : {len(pdf_bytes)} octets)")
 
-        # Valider le fichier PDF
-        if not validate_pdf(pdf_bytes):
-            return jsonify({"error": "Invalid PDF file"}), 400
-
-        # 1) Extraire le texte (PyPDF2 + fallback OCR)
+        # Étape 2 : Extraire le texte et loguer
         pdf_text = extract_text_with_fallback(pdf_bytes)
+        logging.info(f"Texte extrait : {pdf_text[:500]}...")  # Limiter à 500 caractères pour éviter de tout afficher
 
-        # 2) Analyse ChatGPT
+        # Étape 3 : Analyse ChatGPT et loguer
         report_text = analyze_text_with_chatgpt(pdf_text, INSTRUCTIONS)
+        logging.info(f"Rapport généré : {report_text[:500]}...")  # Limiter l'affichage
+
         if not report_text:
+            logging.error("L'analyse ChatGPT a échoué")
             return jsonify({"error": "ChatGPT analysis failed"}), 500
 
-        # 3) Générer PDF rapport
+        # Étape 4 : Générer un PDF rapport et loguer
         report_pdf_bytes = generate_pdf_in_memory(report_text)
+        logging.info(f"Rapport PDF généré (taille : {len(report_pdf_bytes)} octets)")
 
-        # 4) Encoder le rapport
+        # Étape 5 : Encoder et retourner le PDF
         report_pdf_base64 = base64.b64encode(report_pdf_bytes).decode('utf-8')
+        logging.info("Réponse encodée et prête à être renvoyée")
 
         return jsonify({
             "report_pdf_base64": report_pdf_base64
         }), 200
 
     except Exception as e:
-        logging.exception("Erreur inattendue")
+        logging.exception("Erreur inattendue dans /analyze_pdf")
         return jsonify({"error": str(e)}), 500
 
 def validate_pdf(pdf_data: bytes) -> bool:
