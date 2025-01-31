@@ -14,7 +14,7 @@ from reportlab.lib.pagesizes import A4
 
 app = Flask(__name__)
 
-openai.api_key = "OPENAI_API_KEY"
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
 Tu auras pour objectif d'analyser des fichiers PDF avec un certain nombre de points de contrôle 
@@ -177,4 +177,4 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     return pdf_data
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
