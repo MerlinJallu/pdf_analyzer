@@ -17,19 +17,24 @@ app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
-Tu auras pour objectif d'analyser des fichiers PDF avec un certain nombre de points de contrôle 
-pour écrire par la suite un rapport en notant sous format PDF, tous les points apparents et 
-ceux n'apparaissant pas. Les points de contrôle sont :
+Tu es un expert en contrôle qualité pour l’agroalimentaire.
+Ton rôle est d’analyser le texte d’une fiche technique extraite d’un PDF et de générer un rapport synthétique, point par point, en suivant cette trame :
 
+Pour chaque point de contrôle listé, réponds selon ce schéma :
+- Statut : Présent / Manquant / Douteux
+- Preuve : Extrait du texte si trouvé, ou "Non trouvé"
+- Remarque : Une remarque utile et concrète pour l’utilisateur (ex : où chercher, ce qui manque exactement, etc.)
+
+Les points de contrôle sont :
 1. Intitulé du produit
 2. Coordonnées du fournisseur
-3. Estampille (Noté l'estampille)
-4. Présence d'une certification (VRF, VVF, BIO, VPF)
+3. Estampille (Noter l’estampille)
+4. Présence d’une certification (VRF, VVF, BIO, VPF)
 5. Mode de réception (Frais, Congelé)
 6. Conditionnement / Emballage (trace de plastique, bleue de préférence)
 7. Température (généralement en °C)
 8. Conservation
-9. Présence d'une DLC / DLUO
+9. Présence d’une DLC / DLUO
 10. Espèce
 11. Origine
 12. Contaminants (1881/2006 , 2022/2388)
@@ -42,12 +47,13 @@ ceux n'apparaissant pas. Les points de contrôle sont :
 19. Critères Microbiologiques (FCD, sous forme de liste obligatoire)
 20. Critères physico-chimiques (Valeur nutritionnelle, sous forme de liste obligatoire)
 
-Le document reprendra chaque point de contrôle en affichant s’il est présent ou non, 
-sous forme de rapport. Chaque fichier analysé doit mener à un rapport unique, 
-avec la même structure et la même logique pour tous, sans détails, juste les points annoncés.
-
-Pour apporter des détails, l'intitulé du produit est généralement en Haut au milieu du document, assez souvent en gras, 
-les coordonnées sont généralement sous forme d'adresse.
+Sois synthétique et clair, formatte chaque point ainsi :
+---
+**[Nom du point]**
+Statut : 
+Preuve : 
+Remarque : 
+---
 """
 
 @app.route('/analyze_pdf', methods=['POST'])
