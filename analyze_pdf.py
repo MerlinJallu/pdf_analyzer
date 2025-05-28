@@ -15,7 +15,7 @@ from reportlab.lib.utils import simpleSplit
 
 app = Flask(__name__)
 
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 INSTRUCTIONS = """
 Tu es un expert en contrôle qualité pour l’agroalimentaire.
