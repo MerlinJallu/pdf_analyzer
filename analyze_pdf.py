@@ -11,31 +11,25 @@ from PyPDF2 import PdfReader
 from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import simpleSplit
 
 app = Flask(__name__)
 
-client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
-Tu es un expert en contrôle qualité pour l’agroalimentaire.
-Ton rôle est d’analyser le texte d’une fiche technique extraite d’un PDF et de générer un rapport synthétique, point par point, en suivant cette trame :
+Tu auras pour objectif d'analyser des fichiers PDF avec un certain nombre de points de contrôle 
+pour écrire par la suite un rapport en notant sous format PDF, tous les points apparents et 
+ceux n'apparaissant pas. Les points de contrôle sont :
 
-Pour chaque point de contrôle listé, réponds selon ce schéma :
-- Statut : Présent / Manquant / Douteux
-- Preuve : Extrait du texte si trouvé, ou "Non trouvé"
-- Remarque : Une remarque utile et concrète pour l’utilisateur (ex : où chercher, ce qui manque exactement, etc.)
-
-Les points de contrôle sont :
 1. Intitulé du produit
 2. Coordonnées du fournisseur
-3. Estampille (Noter l’estampille)
-4. Présence d’une certification (VRF, VVF, BIO, VPF)
+3. Estampille (Noté l'estampille)
+4. Présence d'une certification (VRF, VVF, BIO, VPF)
 5. Mode de réception (Frais, Congelé)
 6. Conditionnement / Emballage (trace de plastique, bleue de préférence)
 7. Température (généralement en °C)
 8. Conservation
-9. Présence d’une DLC / DLUO
+9. Présence d'une DLC / DLUO
 10. Espèce
 11. Origine
 12. Contaminants (1881/2006 , 2022/2388)
@@ -48,19 +42,21 @@ Les points de contrôle sont :
 19. Critères Microbiologiques (FCD, sous forme de liste obligatoire)
 20. Critères physico-chimiques (Valeur nutritionnelle, sous forme de liste obligatoire)
 
-Sois synthétique et clair, formatte chaque point ainsi :
----
-**[Nom du point]**
-Statut : 
-Preuve : 
-Remarque : 
----
+Le document reprendra chaque point de contrôle en affichant s’il est présent ou non, 
+sous forme de rapport. Chaque fichier analysé doit mener à un rapport unique, 
+avec la même structure et la même logique pour tous, sans détails, juste les points annoncés.
+
+Pour apporter des détails, l'intitulé du produit est généralement en Haut au milieu du document, assez souvent en gras, 
+les coordonnées sont généralement sous forme d'adresse.
 """
 
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
     try:
+        # Loguer la réception de la requête
         logging.info("Requête reçue dans /analyze_pdf")
+        
+        # Vérifier et loguer le contenu du JSON reçu
         data = request.get_json()
         logging.info(f"Contenu reçu : {data}")
 
@@ -70,27 +66,27 @@ def analyze_pdf():
 
         pdf_base64 = data["pdf_base64"]
 
-        # Décoder PDF
+        # Étape 1 : Décoder le PDF et loguer
         pdf_bytes = base64.b64decode(pdf_base64)
         logging.info(f"PDF décodé avec succès (taille : {len(pdf_bytes)} octets)")
 
-        # Extraction texte
+        # Étape 2 : Extraire le texte et loguer
         pdf_text = extract_text_with_fallback(pdf_bytes)
-        logging.info(f"Texte extrait : {pdf_text[:500]}...")
+        logging.info(f"Texte extrait : {pdf_text[:500]}...")  # Limiter à 500 caractères pour éviter de tout afficher
 
-        # Analyse IA
+        # Étape 3 : Analyse ChatGPT et loguer
         report_text = analyze_text_with_chatgpt(pdf_text, INSTRUCTIONS)
-        logging.info(f"Rapport généré : {report_text[:500]}...")
+        logging.info(f"Rapport généré : {report_text[:500]}...")  # Limiter l'affichage
 
         if not report_text:
             logging.error("L'analyse ChatGPT a échoué")
             return jsonify({"error": "ChatGPT analysis failed"}), 500
 
-        # Génération PDF rapport
+        # Étape 4 : Générer un PDF rapport et loguer
         report_pdf_bytes = generate_pdf_in_memory(report_text)
         logging.info(f"Rapport PDF généré (taille : {len(report_pdf_bytes)} octets)")
 
-        # Encode et renvoi
+        # Étape 5 : Encoder et retourner le PDF
         report_pdf_base64 = base64.b64encode(report_pdf_bytes).decode('utf-8')
         logging.info("Réponse encodée et prête à être renvoyée")
 
@@ -103,6 +99,9 @@ def analyze_pdf():
         return jsonify({"error": str(e)}), 500
 
 def validate_pdf(pdf_data: bytes) -> bool:
+    """
+    Valide si un fichier est un PDF correct en tentant de le lire avec PyPDF2.
+    """
     try:
         PdfReader(io.BytesIO(pdf_data))
         return True
@@ -112,21 +111,43 @@ def validate_pdf(pdf_data: bytes) -> bool:
 
 def extract_text_with_fallback(pdf_data: bytes) -> str:
     """
-    Extraction hybride : chaque page est traitée en PyPDF2 puis OCR si besoin.
+    Tente d'extraire le texte via PyPDF2.
+    Si c'est vide, fait un OCR avec pdf2image + pytesseract.
+    """
+    extracted_text = extract_text_from_pdf_pypdf2(pdf_data)
+
+    if not extracted_text.strip():
+        logging.info("PyPDF2 returned no text; switching to OCR.")
+        extracted_text = extract_text_ocr(pdf_data)
+        if not extracted_text.strip():
+            logging.warning("OCR also returned no text. Document may be unextractable.")
+
+    return extracted_text
+
+def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
+    text_content = []
+    try:
+        reader = PdfReader(io.BytesIO(pdf_data))
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text_content.append(page_text)
+    except Exception as e:
+        logging.error(f"Erreur d'extraction PDF (PyPDF2) : {e}")
+    return "\n".join(text_content)
+
+def extract_text_ocr(pdf_data: bytes) -> str:
+    """
+    Convertit chaque page du PDF en image (via pdf2image), puis applique pytesseract.
     """
     text_parts = []
     try:
-        reader = PdfReader(io.BytesIO(pdf_data))
         images = convert_from_bytes(pdf_data, dpi=300)
-        for i, page in enumerate(reader.pages):
-            page_text = page.extract_text() or ''
-            if not page_text.strip() and images:
-                ocr_text = pytesseract.image_to_string(images[i], lang="fra")
-                text_parts.append(f"[Page {i+1} - OCR]\n{ocr_text}")
-            else:
-                text_parts.append(f"[Page {i+1} - PDF]\n{page_text}")
+        for img in images:
+            ocr_text = pytesseract.image_to_string(img, lang="fra")
+            text_parts.append(ocr_text)
     except Exception as e:
-        logging.error(f"Erreur mixte extraction PDF/OCR : {e}")
+        logging.error(f"Erreur d'extraction OCR : {e}")
     return "\n".join(text_parts)
 
 def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
@@ -135,14 +156,13 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
             {"role": "system", "content": instructions},
             {"role": "user", "content": pdf_text}
         ]
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=messages,
             temperature=0.0,
             max_tokens=3500
         )
         return response.choices[0].message.content.strip()
-
     except Exception as e:
         logging.error(f"Erreur ChatGPT : {e}")
         return None
@@ -153,33 +173,20 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     width, height = A4
 
     x_margin, y_margin = 60, 60
-    max_width = width - 2 * x_margin
-    y = height - y_margin
+    textobject = c.beginText(x_margin, height - y_margin)
+    textobject.setFont("Helvetica", 11)
 
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(x_margin, y, "Rapport d'Analyse Fiche Technique")
-    y -= 30
-    c.setFont("Helvetica", 11)
+    lines = report_text.split('\n')
+    for line in lines:
+        if len(line) > 110:
+            segments = [line[i:i+110] for i in range(0, len(line), 110)]
+            for seg in segments:
+                textobject.textLine(seg)
+        else:
+            textobject.textLine(line)
 
-    line_height = 14
-
-    for line in report_text.split('\n'):
-        if y < y_margin + line_height:
-            c.showPage()
-            y = height - y_margin
-            c.setFont("Helvetica", 11)
-        wrapped = simpleSplit(line, "Helvetica", 11, max_width)
-        for wline in wrapped:
-            c.drawString(x_margin, y, wline)
-            y -= line_height
-            if y < y_margin + line_height:
-                c.showPage()
-                y = height - y_margin
-                c.setFont("Helvetica", 11)
-
-    # Footer
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(x_margin, 20, "Rapport généré automatiquement - Service Qualité")
+    c.drawText(textobject)
+    c.showPage()
     c.save()
     pdf_data = buffer.getvalue()
     buffer.close()
