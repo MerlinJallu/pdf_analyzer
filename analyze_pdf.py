@@ -135,13 +135,14 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
             {"role": "system", "content": instructions},
             {"role": "user", "content": pdf_text}
         ]
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=messages,
             temperature=0.0,
             max_tokens=3500
         )
         return response.choices[0].message.content.strip()
+
     except Exception as e:
         logging.error(f"Erreur ChatGPT : {e}")
         return None
