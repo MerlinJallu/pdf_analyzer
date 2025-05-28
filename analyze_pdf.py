@@ -17,15 +17,21 @@ app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
-Tu es un expert en contrôle qualité pour l’agroalimentaire.
-Ton rôle est d’analyser le texte d’une fiche technique extraite d’un PDF et de générer un rapport synthétique, point par point, en suivant cette trame :
+Tu es un expert en contrôle qualité. 
+Pour chaque point de contrôle listé, tu dois absolument :
+- Chercher toute information même partielle ou approximative. 
+- Si le point est partiellement présent, indique "Partiel" et fournis ce que tu trouves. 
+- Si le point n'est pas explicite mais des indices apparaissent, indique "Douteux" et explique ce que tu vois.
+- Si vraiment absent, marque "Non trouvé" mais cite un passage du texte similaire s’il existe.
 
-Pour chaque point de contrôle listé, réponds selon ce schéma :
-- Statut : Présent / Manquant / Douteux
-- Preuve : Extrait du texte si trouvé, ou "Non trouvé"
-- Remarque : Une remarque utile et concrète pour l’utilisateur (ex : où chercher, ce qui manque exactement, etc.)
+Format pour chaque point (réponds obligatoirement à tous les items) :
+---
+**[Nom du point]**
+Statut : Présent / Partiel / Douteux / Non trouvé
+Preuve : (copie-colle la phrase ou le passage du texte, même s’il n’est pas complet)
+Remarque : (toujours ajouter un conseil à l'utilisateur pour mieux vérifier ce point)
 
-Les points de contrôle sont :
+Voici la liste des points à contrôler : 
 1. Intitulé du produit
 2. Coordonnées du fournisseur
 3. Estampille (Noter l’estampille)
