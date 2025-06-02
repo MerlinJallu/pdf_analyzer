@@ -2,6 +2,7 @@ import base64
 import io
 import logging
 import os
+import textwrap
 
 from flask import Flask, request, jsonify
 
@@ -184,18 +185,27 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
-    x_margin, y_margin = 60, 60
+    x_margin, y_margin = 50, 50
+    line_height = 14
+    max_width = width - 2 * x_margin
+    max_chars_per_line = 100  # adapte selon la police
+
     textobject = c.beginText(x_margin, height - y_margin)
     textobject.setFont("Helvetica", 11)
 
-    lines = report_text.split('\n')
-    for line in lines:
-        if len(line) > 110:
-            segments = [line[i:i+110] for i in range(0, len(line), 110)]
-            for seg in segments:
-                textobject.textLine(seg)
-        else:
-            textobject.textLine(line)
+    y = height - y_margin
+    for line in report_text.split('\n'):
+        # Wrap propre sans couper les mots
+        wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
+        for wrapped_line in wrapped_lines:
+            if y < y_margin + line_height:
+                c.drawText(textobject)
+                c.showPage()
+                textobject = c.beginText(x_margin, height - y_margin)
+                textobject.setFont("Helvetica", 11)
+                y = height - y_margin
+            textobject.textLine(wrapped_line)
+            y -= line_height
 
     c.drawText(textobject)
     c.showPage()
