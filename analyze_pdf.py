@@ -30,7 +30,8 @@ Format pour chaque point (réponds obligatoirement à tous les items) :
 **[Nom du point]**
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (copie-colle la phrase ou le passage du texte, même s’il n’est pas complet)
-Remarque : (toujours ajouter un conseil à l'utilisateur pour mieux vérifier ce point)
+Remarque : Pour chaque remarque, donne un vrai conseil : par exemple où chercher, quel indice repérer dans le texte, ou une hypothèse sur l’endroit où pourrait apparaître la donnée.
+Ne te contente pas de dire "vérifier la présence de..." ou "assurez-vous de...", sois plus précis !
 
 Voici la liste des points à contrôler : 
 1. Intitulé du produit
