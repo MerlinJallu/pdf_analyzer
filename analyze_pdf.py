@@ -2,6 +2,7 @@ import base64
 import io
 import logging
 import os
+import re
 import textwrap
 
 from flask import Flask, request, jsonify
@@ -18,63 +19,59 @@ app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
-Tu es un expert assistant qualité agroalimentaire, chargé de vérifier des fiches techniques et d'aider un humain à prendre la meilleure décision.
+Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
 
-Pour chaque point de contrôle ci-dessous :
-1. Analyse le texte et dis si le point est présent, partiel, douteux, ou absent.
-2. Donne un exemple concret trouvé dans le texte, même partiel, ou cite la phrase “non trouvé” sinon.
-3. Évalue la criticité de l’absence (Critique, Majeur, Mineur), et explique en une phrase pourquoi.
-4. Donne une recommandation ou action à faire : “Valider”, “Demander complément au fournisseur”, “Bloquant”, etc.
-5. Si possible, indique la référence réglementaire associée, ou le contexte réglementaire.
-6. Si tu repères une incohérence entre deux infos du texte (ex : mention de frais mais température de congelé), signale-le explicitement en fin de rapport.
+1. Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.
+2. Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.
+3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi.
+4. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
+5. Si tu repères une incohérence entre deux infos, signale-la.
 
 Format pour chaque point :
+
 ---
 **[Nom du point]**
 Statut : Présent / Partiel / Douteux / Non trouvé
-Preuve : (citation exacte, phrase du texte, ou “non trouvé”)
-Criticité : Critique / Majeur / Mineur + explication (1 phrase)
+Preuve : (citation du texte ou “non trouvé”)
+Criticité : Critique / Majeur / Mineur + explication
 Recommandation : (valider, demander complément, bloquant…)
-Référence réglementaire : (si connue)
+
 ---
 
-En fin de rapport, fais un résumé :
-- Nombre de points critiques / majeurs / mineurs
-- Décision recommandée (valider, bloquer, demander complément…)
-- Liste toute incohérence détectée (ex : origine différente, info absente mais obligatoire, etc.)
+**Résumé :**
+- Points critiques (nombre) : [liste des points concernés]
+- Points majeurs (nombre) : [liste des points concernés]
+- Points mineurs (nombre) : [liste des points concernés]
+- Décision recommandée : (valider / demander complément / refuser)
+- Incohérences détectées : [liste]
 
-Liste à analyser :
-
+Voici la liste à analyser :
 1. Intitulé du produit
 2. Coordonnées du fournisseur
-3. Estampille (Noter l’estampille)
+3. Estampille
 4. Présence d’une certification (VRF, VVF, BIO, VPF)
 5. Mode de réception (Frais, Congelé)
-6. Conditionnement / Emballage (trace de plastique, bleue de préférence)
-7. Température (généralement en °C)
+6. Conditionnement / Emballage
+7. Température
 8. Conservation
 9. Présence d’une DLC / DLUO
 10. Espèce
 11. Origine
 12. Contaminants (1881/2006 , 2022/2388)
-13. Corps Etranger (absence le plus possible)
-14. VSM (absence obligatoire)
-15. Aiguilles (absence obligatoire)
-16. Date du document (doit être de moins de 3 ans)
-17. Composition du produit (liste et pourcentage requis)
-18. Process (détaillé et structuré sous forme de liste obligatoire)
-19. Critères Microbiologiques (FCD, sous forme de liste obligatoire)
-20. Critères physico-chimiques (Valeur nutritionnelle, sous forme de liste obligatoire)
-
+13. Corps Etranger
+14. VSM
+15. Aiguilles
+16. Date du document
+17. Composition du produit
+18. Process
+19. Critères Microbiologiques
+20. Critères physico-chimiques
 """
 
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
     try:
-        # Loguer la réception de la requête
         logging.info("Requête reçue dans /analyze_pdf")
-        
-        # Vérifier et loguer le contenu du JSON reçu
         data = request.get_json()
         logging.info(f"Contenu reçu : {data}")
 
@@ -84,27 +81,21 @@ def analyze_pdf():
 
         pdf_base64 = data["pdf_base64"]
 
-        # Étape 1 : Décoder le PDF et loguer
         pdf_bytes = base64.b64decode(pdf_base64)
         logging.info(f"PDF décodé avec succès (taille : {len(pdf_bytes)} octets)")
 
-        # Étape 2 : Extraire le texte et loguer
         pdf_text = extract_text_with_fallback(pdf_bytes)
-        logging.info(f"Texte extrait : {pdf_text[:500]}...")  # Limiter à 500 caractères pour éviter de tout afficher
+        logging.info(f"Texte extrait : {pdf_text[:500]}...")
 
-        # Étape 3 : Analyse ChatGPT et loguer
         report_text = analyze_text_with_chatgpt(pdf_text, INSTRUCTIONS)
-        logging.info(f"Rapport généré : {report_text[:500]}...")  # Limiter l'affichage
-
         if not report_text:
             logging.error("L'analyse ChatGPT a échoué")
             return jsonify({"error": "ChatGPT analysis failed"}), 500
 
-        # Étape 4 : Générer un PDF rapport et loguer
+        report_text = format_report_text(report_text)
         report_pdf_bytes = generate_pdf_in_memory(report_text)
         logging.info(f"Rapport PDF généré (taille : {len(report_pdf_bytes)} octets)")
 
-        # Étape 5 : Encoder et retourner le PDF
         report_pdf_base64 = base64.b64encode(report_pdf_bytes).decode('utf-8')
         logging.info("Réponse encodée et prête à être renvoyée")
 
@@ -116,30 +107,15 @@ def analyze_pdf():
         logging.exception("Erreur inattendue dans /analyze_pdf")
         return jsonify({"error": str(e)}), 500
 
-def validate_pdf(pdf_data: bytes) -> bool:
-    """
-    Valide si un fichier est un PDF correct en tentant de le lire avec PyPDF2.
-    """
-    try:
-        PdfReader(io.BytesIO(pdf_data))
-        return True
-    except Exception as e:
-        logging.error(f"Validation échouée pour le fichier PDF : {e}")
-        return False
-
 def extract_text_with_fallback(pdf_data: bytes) -> str:
-    """
-    Tente d'extraire le texte via PyPDF2.
-    Si c'est vide, fait un OCR avec pdf2image + pytesseract.
-    """
     extracted_text = extract_text_from_pdf_pypdf2(pdf_data)
-
+    logging.info(f"Texte extrait via PyPDF2 : {len(extracted_text)} caractères")
     if not extracted_text.strip():
-        logging.info("PyPDF2 returned no text; switching to OCR.")
+        logging.info("PyPDF2 vide, passage à l'OCR.")
         extracted_text = extract_text_ocr(pdf_data)
+        logging.info(f"Texte extrait via OCR : {len(extracted_text)} caractères")
         if not extracted_text.strip():
-            logging.warning("OCR also returned no text. Document may be unextractable.")
-
+            logging.warning("OCR vide : document peut-être inexploitable.")
     return extracted_text
 
 def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
@@ -155,9 +131,6 @@ def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
     return "\n".join(text_content)
 
 def extract_text_ocr(pdf_data: bytes) -> str:
-    """
-    Convertit chaque page du PDF en image (via pdf2image), puis applique pytesseract.
-    """
     text_parts = []
     try:
         images = convert_from_bytes(pdf_data, dpi=300)
@@ -178,12 +151,24 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
             model="gpt-3.5-turbo",
             messages=messages,
             temperature=0.0,
-            max_tokens=3500
+            max_tokens=3500,
+            request_timeout=30  # Sécurité pour éviter le freeze
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         logging.error(f"Erreur ChatGPT : {e}")
         return None
+
+def format_report_text(report_text):
+    # Saut de ligne après chaque bloc Recommandation (si ce n'est pas déjà fait)
+    report_text = re.sub(r'(Recommandation\s?:[^\n]*)', r'\1\n', report_text)
+    # Ajoute un saut de ligne avant chaque nouveau point (titre en gras)
+    report_text = re.sub(r'(\*\*[A-Z][^*]+\*\*)', r'\n\1', report_text)
+    # Double saut de ligne après chaque '---'
+    report_text = report_text.replace('---', '---\n')
+    # Double saut après 'Résumé :'
+    report_text = report_text.replace('**Résumé :**', '\n\n**Résumé :**\n')
+    return report_text
 
 def generate_pdf_in_memory(report_text: str) -> bytes:
     buffer = io.BytesIO()
@@ -193,14 +178,16 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     x_margin, y_margin = 50, 50
     line_height = 14
     max_width = width - 2 * x_margin
-    max_chars_per_line = 100  # adapte selon la police
+    max_chars_per_line = 100  # adapte si besoin
 
     textobject = c.beginText(x_margin, height - y_margin)
     textobject.setFont("Helvetica", 11)
 
     y = height - y_margin
     for line in report_text.split('\n'):
-        # Wrap propre sans couper les mots
+        if line.strip() == '':
+            y -= line_height // 2
+            continue
         wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
         for wrapped_line in wrapped_lines:
             if y < y_margin + line_height:
