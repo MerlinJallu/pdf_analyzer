@@ -30,7 +30,7 @@ Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de cont
 Format pour chaque point :
 
 ---
-**[Nom du point]**
+[Nom du point]
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication
@@ -38,7 +38,7 @@ Recommandation : (valider, demander complément, bloquant…)
 
 ---
 
-**Résumé :**
+Résumé :
 - Points critiques (nombre) : [liste des points concernés]
 
 - Points majeurs (nombre) : [liste des points concernés]
