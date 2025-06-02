@@ -18,22 +18,33 @@ app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
-Tu es un expert en contrôle qualité. 
-Pour chaque point de contrôle listé, tu dois absolument :
-- Chercher toute information même partielle ou approximative. 
-- Si le point est partiellement présent, indique "Partiel" et fournis ce que tu trouves. 
-- Si le point n'est pas explicite mais des indices apparaissent, indique "Douteux" et explique ce que tu vois.
-- Si vraiment absent, marque "Non trouvé" mais cite un passage du texte similaire s’il existe.
+Tu es un expert assistant qualité agroalimentaire, chargé de vérifier des fiches techniques et d'aider un humain à prendre la meilleure décision.
 
-Format pour chaque point (réponds obligatoirement à tous les items) :
+Pour chaque point de contrôle ci-dessous :
+1. Analyse le texte et dis si le point est présent, partiel, douteux, ou absent.
+2. Donne un exemple concret trouvé dans le texte, même partiel, ou cite la phrase “non trouvé” sinon.
+3. Évalue la criticité de l’absence (Critique, Majeur, Mineur), et explique en une phrase pourquoi.
+4. Donne une recommandation ou action à faire : “Valider”, “Demander complément au fournisseur”, “Bloquant”, etc.
+5. Si possible, indique la référence réglementaire associée, ou le contexte réglementaire.
+6. Si tu repères une incohérence entre deux infos du texte (ex : mention de frais mais température de congelé), signale-le explicitement en fin de rapport.
+
+Format pour chaque point :
 ---
 **[Nom du point]**
 Statut : Présent / Partiel / Douteux / Non trouvé
-Preuve : (copie-colle la phrase ou le passage du texte, même s’il n’est pas complet)
-Remarque : Pour chaque remarque, donne un vrai conseil : par exemple où chercher, quel indice repérer dans le texte, ou une hypothèse sur l’endroit où pourrait apparaître la donnée.
-Ne te contente pas de dire "vérifier la présence de..." ou "assurez-vous de...", sois plus précis !
+Preuve : (citation exacte, phrase du texte, ou “non trouvé”)
+Criticité : Critique / Majeur / Mineur + explication (1 phrase)
+Recommandation : (valider, demander complément, bloquant…)
+Référence réglementaire : (si connue)
+---
 
-Voici la liste des points à contrôler : 
+En fin de rapport, fais un résumé :
+- Nombre de points critiques / majeurs / mineurs
+- Décision recommandée (valider, bloquer, demander complément…)
+- Liste toute incohérence détectée (ex : origine différente, info absente mais obligatoire, etc.)
+
+Liste à analyser :
+
 1. Intitulé du produit
 2. Coordonnées du fournisseur
 3. Estampille (Noter l’estampille)
@@ -55,13 +66,6 @@ Voici la liste des points à contrôler :
 19. Critères Microbiologiques (FCD, sous forme de liste obligatoire)
 20. Critères physico-chimiques (Valeur nutritionnelle, sous forme de liste obligatoire)
 
-Sois synthétique et clair, formatte chaque point ainsi :
----
-**[Nom du point]**
-Statut : 
-Preuve : 
-Remarque : 
----
 """
 
 @app.route('/analyze_pdf', methods=['POST'])
