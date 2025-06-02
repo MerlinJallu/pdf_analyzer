@@ -40,13 +40,13 @@ Recommandation : (valider, demander complément, bloquant…)
 
 Résumé :
 - Points critiques (nombre) : [liste des points concernés]
-
+---
 - Points majeurs (nombre) : [liste des points concernés]
-
+---
 - Points mineurs (nombre) : [liste des points concernés]
-
+---
 - Décision recommandée : (valider / demander complément / refuser)
-
+---
 - Incohérences détectées : [liste]
 
 Voici la liste à analyser :
