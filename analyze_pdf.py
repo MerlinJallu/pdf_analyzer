@@ -29,7 +29,7 @@ Add commentMore actions
 
 Format pour chaque point :
 ---
-[Nom du point]
+Nom du point
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication
