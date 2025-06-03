@@ -28,15 +28,12 @@ Add commentMore actions
 5. Si tu repères une incohérence entre deux infos, signale-la.
 
 Format pour chaque point :
-
 ---
 [Nom du point]
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication
 Recommandation : (valider, demander complément, bloquant…)
-
----
 
 Résumé :
 - Points critiques (nombre) : [liste des points concernés]
@@ -195,7 +192,7 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
         "Mode de réception", "Conditionnement / Emballage", "Température", "Conservation",
         "Présence d’une DLC / DLUO", "Espèce", "Origine", "Contaminants", "Corps Etranger",
         "VSM", "Aiguilles", "Date du document", "Composition du produit", "Process",
-        "Critères Microbiologiques", "Critères physico-chimiques"
+        "Critères Microbiologiques", "Critères physico-chimiques", "Résumé"
     ]
 
     for line in report_text.split('\n'):
