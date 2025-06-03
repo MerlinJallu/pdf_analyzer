@@ -180,28 +180,59 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     width, height = A4
 
     x_margin, y_margin = 50, 50
-    line_height = 14
+    line_height = 16
     max_width = width - 2 * x_margin
-    max_chars_per_line = 100  # adapte si besoin
+    max_chars_per_line = 100
 
     textobject = c.beginText(x_margin, height - y_margin)
     textobject.setFont("Helvetica", 11)
 
     y = height - y_margin
+
+    # Liste des points (à adapter si la liste change)
+    point_titles = [
+        "Intitulé du produit", "Coordonnées du fournisseur", "Estampille", "Présence d’une certification",
+        "Mode de réception", "Conditionnement / Emballage", "Température", "Conservation",
+        "Présence d’une DLC / DLUO", "Espèce", "Origine", "Contaminants", "Corps Etranger",
+        "VSM", "Aiguilles", "Date du document", "Composition du produit", "Process",
+        "Critères Microbiologiques", "Critères physico-chimiques"
+    ]
+
     for line in report_text.split('\n'):
-        if line.strip() == '':
+        stripped = line.strip()
+        if stripped == '':
             y -= line_height // 2
             continue
-        wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
-        for wrapped_line in wrapped_lines:
-            if y < y_margin + line_height:
-                c.drawText(textobject)
-                c.showPage()
-                textobject = c.beginText(x_margin, height - y_margin)
-                textobject.setFont("Helvetica", 11)
-                y = height - y_margin
-            textobject.textLine(wrapped_line)
+
+        # Vérifie si la ligne est un titre de point de contrôle
+        is_title = False
+        for pt in point_titles:
+            if stripped.lower().startswith(pt.lower()):
+                is_title = True
+                break
+
+        # Gras + souligné pour les titres de points
+        if is_title:
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(x_margin, y, stripped)
+            # Soulignement simple
+            underline_y = y - 2
+            text_width = c.stringWidth(stripped, "Helvetica-Bold", 12)
+            c.line(x_margin, underline_y, x_margin + text_width, underline_y)
             y -= line_height
+            c.setFont("Helvetica", 11)
+        else:
+            # Wrap normal pour les autres lignes
+            wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
+            for wrapped_line in wrapped_lines:
+                if y < y_margin + line_height:
+                    c.drawText(textobject)
+                    c.showPage()
+                    textobject = c.beginText(x_margin, height - y_margin)
+                    textobject.setFont("Helvetica", 11)
+                    y = height - y_margin
+                c.drawString(x_margin, y, wrapped_line)
+                y -= line_height
 
     c.drawText(textobject)
     c.showPage()
