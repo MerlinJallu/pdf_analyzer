@@ -14,10 +14,6 @@ from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-from PIL import Image, ImageEnhance, ImageOps
-
-import easyocr
-
 app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
@@ -82,24 +78,13 @@ Voici la liste à analyser :
 **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
 """
 
-def ocr_preprocess(img):
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(2.0)
-    img = img.convert('L')
-    img = ImageOps.autocontrast(img)
-    img = img.point(lambda x: 0 if x < 160 else 255, '1')
-    return img
-
 def extract_text_with_fallback(pdf_data: bytes) -> str:
-    # 1. PyPDF2
     text = extract_text_from_pdf_pypdf2(pdf_data)
     if text.strip():
         return text + "\n\n[INFO] Texte natif PDF utilisé."
-    # 2. OCR boosté (Tesseract + EasyOCR)
-    text = extract_text_ocr_boosted(pdf_data)
+    text = extract_text_ocr(pdf_data)
     if text.strip():
         return text + "\n\n[INFO] OCR utilisé."
-    # 3. GPT-4o Vision fallback
     img_pages = convert_from_bytes(pdf_data, dpi=400)
     vision_texts = []
     for i, img in enumerate(img_pages):
@@ -117,28 +102,6 @@ def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
     except Exception as e:
         logging.error(f"Erreur d'extraction PDF (PyPDF2) : {e}")
     return "\n".join(text_content)
-
-def extract_text_ocr_boosted(pdf_data: bytes) -> str:
-    images = convert_from_bytes(pdf_data, dpi=400)
-    tesseract_text = []
-    easyocr_text = []
-    reader = easyocr.Reader(['fr'], gpu=False)
-    for img in images:
-        img_prep = ocr_preprocess(img)
-        # Tesseract
-        tesseract_text.append(pytesseract.image_to_string(img_prep, lang="fra"))
-        # EasyOCR
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG')
-        img_bytes.seek(0)
-        result_easy = reader.readtext(img_bytes.getvalue(), detail=0)
-        easyocr_text.append('\n'.join(result_easy))
-    # Combine results
-    combined = []
-    for t, e in zip(tesseract_text, easyocr_text):
-        # Fusionne Tesseract et EasyOCR par page
-        combined.append(t + "\n" + e)
-    return "\n".join(combined)
 
 def analyze_image_with_gpt4o(img, page=1):
     buffered = io.BytesIO()
