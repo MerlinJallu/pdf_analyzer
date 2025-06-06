@@ -14,8 +14,11 @@ from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-app = Flask(__name__)
+from PIL import Image, ImageEnhance, ImageOps
 
+import easyocr
+
+app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
@@ -79,6 +82,166 @@ Voici la liste à analyser :
 **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
 """
 
+def ocr_preprocess(img):
+    enhancer = ImageEnhance.Contrast(img)
+    img = enhancer.enhance(2.0)
+    img = img.convert('L')
+    img = ImageOps.autocontrast(img)
+    img = img.point(lambda x: 0 if x < 160 else 255, '1')
+    return img
+
+def extract_text_with_fallback(pdf_data: bytes) -> str:
+    # 1. PyPDF2
+    text = extract_text_from_pdf_pypdf2(pdf_data)
+    if text.strip():
+        return text + "\n\n[INFO] Texte natif PDF utilisé."
+    # 2. OCR boosté (Tesseract + EasyOCR)
+    text = extract_text_ocr_boosted(pdf_data)
+    if text.strip():
+        return text + "\n\n[INFO] OCR utilisé."
+    # 3. GPT-4o Vision fallback
+    img_pages = convert_from_bytes(pdf_data, dpi=400)
+    vision_texts = []
+    for i, img in enumerate(img_pages):
+        vision_texts.append(analyze_image_with_gpt4o(img, page=i+1))
+    return "\n".join(vision_texts) + "\n\n[INFO] GPT-4o Vision utilisé (fallback)."
+
+def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
+    text_content = []
+    try:
+        reader = PdfReader(io.BytesIO(pdf_data))
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text_content.append(page_text)
+    except Exception as e:
+        logging.error(f"Erreur d'extraction PDF (PyPDF2) : {e}")
+    return "\n".join(text_content)
+
+def extract_text_ocr_boosted(pdf_data: bytes) -> str:
+    images = convert_from_bytes(pdf_data, dpi=400)
+    tesseract_text = []
+    easyocr_text = []
+    reader = easyocr.Reader(['fr'], gpu=False)
+    for img in images:
+        img_prep = ocr_preprocess(img)
+        # Tesseract
+        tesseract_text.append(pytesseract.image_to_string(img_prep, lang="fra"))
+        # EasyOCR
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        result_easy = reader.readtext(img_bytes.getvalue(), detail=0)
+        easyocr_text.append('\n'.join(result_easy))
+    # Combine results
+    combined = []
+    for t, e in zip(tesseract_text, easyocr_text):
+        # Fusionne Tesseract et EasyOCR par page
+        combined.append(t + "\n" + e)
+    return "\n".join(combined)
+
+def analyze_image_with_gpt4o(img, page=1):
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    img_base64 = base64.b64encode(buffered.getvalue()).decode()
+    image_url = f"data:image/png;base64,{img_base64}"
+    vision_prompt = f"""Page {page} de la fiche technique. Lis tous les champs visuels (même mal scannés). Suis exactement ces consignes : 
+
+    Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
+
+    **POUR CHAQUE fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ORDRE, un par un, même si l’information est absente ou douteuse.**
+    
+    1. Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.
+    2. Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.
+    3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi.
+    4. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
+    5. Si tu repères une incohérence entre deux infos, signale-la.
+    
+    **Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
+    
+    **Structure imposée (exemple à suivre pour CHAQUE point, à répéter pour toute la liste) :**
+    
+    Format pour chaque point :
+    ---
+    Nom du point
+    Statut : Présent / Partiel / Douteux / Non trouvé
+    Preuve : (citation du texte ou “non trouvé”)
+    Criticité : Critique / Majeur / Mineur + explication
+    Recommandation : (valider, demander complément, bloquant…)
+    
+    Résumé :
+    - Points critiques (nombre) : [liste des points concernés]
+    ---
+    - Points majeurs (nombre) : [liste des points concernés]
+    ---
+    - Points mineurs (nombre) : [liste des points concernés]
+    ---
+    - Décision recommandée : (valider / demander complément / refuser)
+    ---
+    - Incohérences détectées : [liste]
+    
+    Voici la liste à analyser :
+    1. Intitulé du produit
+    2. Coordonnées du fournisseur
+    3. Estampille
+    4. Présence d’une certification (VRF, VVF, BIO, VPF)
+    5. Mode de réception (Frais, Congelé)
+    6. Conditionnement / Emballage
+    7. Température
+    8. Conservation
+    9. Présence d’une DLC / DLUO
+    10. Espèce
+    11. Origine
+    12. Contaminants (1881/2006 , 2022/2388)
+    13. Corps Etranger
+    14. VSM
+    15. Aiguilles
+    16. Date du document
+    17. Composition du produit
+    18. Process
+    19. Critères Microbiologiques
+    20. Critères physico-chimiques
+    
+    **Répète exactement ce format pour chaque point. Ne regroupe jamais plusieurs points dans un même bloc. Si un point n’a pas d’information, écris “non trouvé”.**
+    
+    **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
+    
+    """
+    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": vision_prompt},
+                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}
+            ],
+            max_tokens=2000,
+        )
+        return f"[ANALYSE IMAGE PAGE {page}]\n" + response.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"Erreur Vision GPT-4o : {e}")
+        return f"[ERREUR GPT-4o Vision sur page {page}]"
+
+def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
+    try:
+        messages = [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": pdf_text}
+        ]
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            temperature=0.0,
+            max_tokens=3500,
+            request_timeout=30
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"Erreur ChatGPT : {e}")
+        return None
+
+# ... (ton format_report_text et generate_pdf_in_memory restent les mêmes) ...
+
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
     try:
@@ -96,7 +259,7 @@ def analyze_pdf():
         logging.info(f"PDF décodé avec succès (taille : {len(pdf_bytes)} octets)")
 
         pdf_text = extract_text_with_fallback(pdf_bytes)
-        logging.info(f"Texte extrait : {pdf_text[:500]}...")
+        logging.info(f"Texte extrait (ou fallback Vision) : {pdf_text[:500]}...")
 
         report_text = analyze_text_with_chatgpt(pdf_text, INSTRUCTIONS)
         if not report_text:
@@ -117,136 +280,6 @@ def analyze_pdf():
     except Exception as e:
         logging.exception("Erreur inattendue dans /analyze_pdf")
         return jsonify({"error": str(e)}), 500
-
-def extract_text_with_fallback(pdf_data: bytes) -> str:
-    extracted_text = extract_text_from_pdf_pypdf2(pdf_data)
-    logging.info(f"Texte extrait via PyPDF2 : {len(extracted_text)} caractères")
-    if not extracted_text.strip():
-        logging.info("PyPDF2 vide, passage à l'OCR.")
-        extracted_text = extract_text_ocr(pdf_data)
-        logging.info(f"Texte extrait via OCR : {len(extracted_text)} caractères")
-        if not extracted_text.strip():
-            logging.warning("OCR vide : document peut-être inexploitable.")
-    return extracted_text
-
-def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
-    text_content = []
-    try:
-        reader = PdfReader(io.BytesIO(pdf_data))
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text_content.append(page_text)
-    except Exception as e:
-        logging.error(f"Erreur d'extraction PDF (PyPDF2) : {e}")
-    return "\n".join(text_content)
-
-def extract_text_ocr(pdf_data: bytes) -> str:
-    text_parts = []
-    try:
-        images = convert_from_bytes(pdf_data, dpi=300)
-        for img in images:
-            ocr_text = pytesseract.image_to_string(img, lang="fra")
-            text_parts.append(ocr_text)
-    except Exception as e:
-        logging.error(f"Erreur d'extraction OCR : {e}")
-    return "\n".join(text_parts)
-
-def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
-    try:
-        messages = [
-            {"role": "system", "content": instructions},
-            {"role": "user", "content": pdf_text}
-        ]
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.0,
-            max_tokens=3500,
-            request_timeout=30  # Sécurité pour éviter le freeze
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        logging.error(f"Erreur ChatGPT : {e}")
-        return None
-
-def format_report_text(report_text):
-    # Saut de ligne après chaque bloc Recommandation (si ce n'est pas déjà fait)
-    report_text = re.sub(r'(Recommandation\s?:[^\n]*)', r'\1\n', report_text)
-    # Ajoute un saut de ligne avant chaque nouveau point (titre en gras)
-    report_text = re.sub(r'(\*\*[A-Z][^*]+\*\*)', r'\n\1', report_text)
-    # Double saut de ligne après chaque '---'
-    report_text = report_text.replace('---', '---\n')
-    # Double saut après 'Résumé :'
-    report_text = report_text.replace('**Résumé :**', '\n\n**Résumé :**\n')
-    return report_text
-
-def generate_pdf_in_memory(report_text: str) -> bytes:
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-
-    x_margin, y_margin = 50, 50
-    line_height = 16
-    max_width = width - 2 * x_margin
-    max_chars_per_line = 100
-
-    textobject = c.beginText(x_margin, height - y_margin)
-    textobject.setFont("Helvetica", 11)
-
-    y = height - y_margin
-
-    # Liste des points (à adapter si la liste change)
-    point_titles = [
-        "Intitulé du produit", "Coordonnées du fournisseur", "Estampille", "Présence d’une certification",
-        "Mode de réception", "Conditionnement / Emballage", "Température", "Conservation",
-        "Présence d’une DLC / DLUO", "Espèce", "Origine", "Contaminants", "Corps Etranger",
-        "VSM", "Aiguilles", "Date du document", "Composition du produit", "Process",
-        "Critères Microbiologiques", "Critères physico-chimiques", "Résumé"
-    ]
-
-    for line in report_text.split('\n'):
-        stripped = line.strip()
-        if stripped == '':
-            y -= line_height // 2
-            continue
-
-        # Vérifie si la ligne est un titre de point de contrôle
-        is_title = False
-        for pt in point_titles:
-            if stripped.lower().startswith(pt.lower()):
-                is_title = True
-                break
-
-        # Gras + souligné pour les titres de points
-        if is_title:
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(x_margin, y, stripped)
-            # Soulignement simple
-            underline_y = y - 2
-            text_width = c.stringWidth(stripped, "Helvetica-Bold", 12)
-            c.line(x_margin, underline_y, x_margin + text_width, underline_y)
-            y -= line_height
-            c.setFont("Helvetica", 11)
-        else:
-            # Wrap normal pour les autres lignes
-            wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
-            for wrapped_line in wrapped_lines:
-                if y < y_margin + line_height:
-                    c.drawText(textobject)
-                    c.showPage()
-                    textobject = c.beginText(x_margin, height - y_margin)
-                    textobject.setFont("Helvetica", 11)
-                    y = height - y_margin
-                c.drawString(x_margin, y, wrapped_line)
-                y -= line_height
-
-    c.drawText(textobject)
-    c.showPage()
-    c.save()
-    pdf_data = buffer.getvalue()
-    buffer.close()
-    return pdf_data
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
