@@ -20,12 +20,18 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 INSTRUCTIONS = """
 Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
-Add commentMore actions
+
+**POUR CHAQUE fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ORDRE, un par un, même si l’information est absente ou douteuse.**
+
 1. Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.
 2. Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.
 3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi.
 4. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
 5. Si tu repères une incohérence entre deux infos, signale-la.
+
+**Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
+
+**Structure imposée (exemple à suivre pour CHAQUE point, à répéter pour toute la liste) :**
 
 Format pour chaque point :
 ---
@@ -67,6 +73,10 @@ Voici la liste à analyser :
 18. Process
 19. Critères Microbiologiques
 20. Critères physico-chimiques
+
+**Répète exactement ce format pour chaque point. Ne regroupe jamais plusieurs points dans un même bloc. Si un point n’a pas d’information, écris “non trouvé”.**
+
+**Tu ne dois jamais condenser, regrouper ou ignorer des points.**
 """
 
 @app.route('/analyze_pdf', methods=['POST'])
