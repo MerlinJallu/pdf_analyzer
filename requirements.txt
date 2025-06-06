@@ -1,5 +1,3 @@
-torch==2.7.1
-torchvision==0.22.1
 Flask
 PyPDF2
 pdf2image
@@ -7,5 +5,4 @@ pytesseract
 reportlab
 openai==0.28.0
 gunicorn
-easyocr
 Pillow
