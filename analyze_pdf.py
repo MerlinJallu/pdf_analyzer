@@ -1,4 +1,4 @@
-import base64
+import base64More actions
 import io
 import logging
 import os
@@ -14,12 +14,13 @@ from PyPDF2 import PdfReader
 from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
 from PIL import ImageEnhance, ImageOps
+
 
 app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
+# Optionnel : mapping pour aider GPT à comprendre les synonymes (met-le dans ton prompt)
 MAPPING_SYNONYMES = """
 Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences :
 - "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit"
@@ -35,38 +36,40 @@ Prends-les en compte lors de l’analyse.
 """
 
 INSTRUCTIONS = f"""
-Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
+Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
 
 **POUR CHAQUE fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ORDRE, un par un, même si l’information est absente ou douteuse.**
 
 {MAPPING_SYNONYMES}
 
-**ATTENTION : Pour chaque point, analyse uniquement le point et N’AJOUTE AUCUN RÉSUMÉ INTERMÉDIAIRE.**
-**Après avoir traité tous les points, rédige UN SEUL résumé final unique à la fin du rapport.**
+1. Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.
+2. Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.
+3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi.
+4. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
+5. Si tu repères une incohérence entre deux infos, signale-la.
 
-**Structure imposée (respecte la mise en forme des titres : commence chaque point par '### Nom du point') :**
+**Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
 
-Exemple de bloc pour chaque point :
-### 1. Intitulé du produit
+Format pour chaque point :
+---
+Nom du point
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication
 Recommandation : (valider, demander complément, bloquant…)
 
-[...puis tous les autres points, chacun commençant par ###]
-
-Après avoir traité les 20 points :  
-Résumé final :
-- Points critiques (nombre) : [liste]
-- Points majeurs (nombre) : [liste]
-- Points mineurs (nombre) : [liste]
-- Décision recommandée : ...
+Résumé :
+- Points critiques (nombre) : [liste des points concernés]
+---
+- Points majeurs (nombre) : [liste des points concernés]
+---
+- Points mineurs (nombre) : [liste des points concernés]
+---
+- Décision recommandée : (valider / demander complément / refuser)
+---
 - Incohérences détectées : [liste]
-- Décision finale recommandée : ...
 
-**N’inclus jamais le résumé avant la fin.**
-
-Voici la liste à analyser :
+Voici la liste à analyser :
 1. Intitulé du produit
 2. Coordonnées du fournisseur
 3. Estampille
@@ -92,21 +95,27 @@ Voici la liste à analyser :
 **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
 """
 
+
 def format_report_text(report_text):
-    # Nettoyage du texte (optionnel, tu peux améliorer)
     report_text = re.sub(r'(Recommandation\s?:[^\n]*)', r'\1\n', report_text)
-    report_text = re.sub(r'\n{3,}', '\n\n', report_text)
+    report_text = re.sub(r'---\n(\w)', r'---\n\n\1', report_text)
+    report_text = report_text.replace('---', '---\n')
+    report_text = report_text.replace('Résumé :', '\n\nRésumé :\n')
     return report_text
 
+
 def extract_text_with_fallback(pdf_data: bytes) -> str:
+    # 1. Texte natif
     text = extract_text_from_pdf_pypdf2(pdf_data)
     if text.strip() and len(text) > 200:
         print("\n>>>> TEXTE NATIF DETECTE <<<<\n", text[:600])
         return text + "\n\n[INFO] Texte natif PDF utilisé."
+    # 2. OCR boosté
     text = extract_text_ocr(pdf_data)
     if text.strip():
         print("\n>>>> OCR DETECTE <<<<\n", text[:600])
         return text + "\n\n[INFO] OCR utilisé."
+    # 3. Fallback vision page par page
     img_pages = convert_from_bytes(pdf_data, dpi=400)
     vision_texts = []
     for i, img in enumerate(img_pages):
@@ -126,6 +135,7 @@ def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
     return "\n".join(text_content)
 
 def clean_ocr_text(ocr_text: str) -> str:
+    # Nettoie le texte pour aider GPT (optionnel mais efficace)
     ocr_text = re.sub(r' +', ' ', ocr_text)
     ocr_text = re.sub(r'\n+', '\n', ocr_text)
     ocr_text = re.sub(r'(\w)-\n(\w)', r'\1\2', ocr_text)  # Fusionne coupures de mots
@@ -143,18 +153,14 @@ def extract_text_ocr(pdf_data: bytes) -> str:
             img = ImageOps.autocontrast(img)
             img = img.point(lambda x: 0 if x < 160 else 255, '1')
             ocr_text = pytesseract.image_to_string(img, lang="fra")
-            print(f"\n>>> OCR PAGE {idx+1} <<<\n{ocr_text}\n---")
+            print(f"\n>>> OCR PAGE {idx+1} <<<\n{ocr_text}\n---")  # Debug visuel
             text_parts.append(ocr_text)
     except Exception as e:
         logging.error(f"Erreur d'extraction OCR : {e}")
-    return clean_ocr_text("\n".join(text_parts))
-
-def analyze_image_with_gpt4o(img, page=1):
-    buffered = io.BytesIO()
     img.save(buffered, format="PNG")
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     image_url = f"data:image/png;base64,{img_base64}"
-    vision_prompt = INSTRUCTIONS
+    vision_prompt = INSTRUCTIONS  # On garde le même prompt ultra complet
     client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     try:
         response = client.chat.completions.create(
@@ -177,7 +183,7 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
             {"role": "user", "content": pdf_text}
         ]
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4o",  # Passe systématiquement sur GPT-4o !
             messages=messages,
             temperature=0.0,
             max_tokens=3500,
@@ -187,6 +193,8 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
     except Exception as e:
         logging.error(f"Erreur ChatGPT : {e}")
         return None
+
+# ... (format_report_text et generate_pdf_in_memory inchangés) ...
 
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
@@ -238,31 +246,28 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
 
     textobject = c.beginText(x_margin, height - y_margin)
     textobject.setFont("Helvetica", 11)
-
     y = height - y_margin
+
     for line in report_text.split('\n'):
         if line.strip() == '':
             y -= line_height // 2
             continue
-
-        # Si le titre commence par "###", gras et plus gros
-        if line.strip().startswith("###"):
-            textobject.setFont("Helvetica-Bold", 12)
-            # On enlève le "### " devant
-            line = line.strip()[4:]
-        else:
+        # Mettre en gras les titres de points (par ex: 1. Intitulé du produit)
+        if re.match(r'^\d+\. ', line.strip()):
+            textobject.setFont("Helvetica-Bold", 11)
+            textobject.textLine(line)
             textobject.setFont("Helvetica", 11)
-
-        wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
-        for wrapped_line in wrapped_lines:
-            if y < y_margin + line_height:
-                c.drawText(textobject)
-                c.showPage()
-                textobject = c.beginText(x_margin, height - y_margin)
-                textobject.setFont("Helvetica", 11)
-                y = height - y_margin
-            textobject.textLine(wrapped_line)
-            y -= line_height
+        else:
+            wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
+            for wrapped_line in wrapped_lines:
+                if y < y_margin + line_height:
+                    c.drawText(textobject)
+                    c.showPage()
+                    textobject = c.beginText(x_margin, height - y_margin)
+                    textobject.setFont("Helvetica", 11)
+                    y = height - y_margin
+                textobject.textLine(wrapped_line)
+                y -= line_height
 
     c.drawText(textobject)
     c.showPage()
