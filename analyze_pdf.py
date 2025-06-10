@@ -26,10 +26,11 @@ Certaines informations de la fiche technique peuvent apparaître sous des intitu
 - "Estampille" : "Estampille sanitaire", "N° d’agrément", "Sanitary mark"
 - "Coordonnées du fournisseur" : "Adresse fournisseur", "Nom et adresse du fabricant"
 - "Origine" : "Origine", "Pays d’origine", "Origine viande"
-- "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée"
+- "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "Durée", "Validité", "à consommer avant.."
 - "Conditionnement / Emballage" : "Packaging", "Conditionnement", "Type d’emballage"
 - "Température" : "Température de conservation", "Storage temperature"
 - "Composition du produit" : "Ingrédients", "Ingredients"
+- "Espèce" : "Viande de Porc", "Porc"
 Prends-les en compte lors de l’analyse.
 """
 
