@@ -1,14 +1,14 @@
-import base64
+import base64More actions
 import io
 import logging
 import os
 import re
 import textwrap
-
 from flask import Flask, request, jsonify
 
 import openai
 import pytesseract
+
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
@@ -91,12 +91,17 @@ def format_report_text(report_text):
     return report_text
 
 def extract_text_with_fallback(pdf_data: bytes) -> str:
+
     text = extract_text_from_pdf_pypdf2(pdf_data)
     if text.strip():
+
         return text + "\n\n[INFO] Texte natif PDF utilisé."
+
     text = extract_text_ocr(pdf_data)
     if text.strip():
+
         return text + "\n\n[INFO] OCR utilisé."
+
     img_pages = convert_from_bytes(pdf_data, dpi=400)
     vision_texts = []
     for i, img in enumerate(img_pages):
