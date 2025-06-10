@@ -16,10 +16,11 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from PIL import ImageEnhance, ImageOps
 
+# --- Flask Setup ---
 app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# Optionnel : mapping pour aider GPT à comprendre les synonymes (met-le dans ton prompt)
+# --- Synonymes pour GPT : met à jour si tu en vois d'autres ---
 MAPPING_SYNONYMES = """
 Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences :
 - "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit"
@@ -94,6 +95,7 @@ Voici la liste à analyser :
 **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
 """
 
+# --- Format le rapport pour meilleure lisibilité PDF ---
 def format_report_text(report_text):
     report_text = re.sub(r'(Recommandation\s?:[^\n]*)', r'\1\n', report_text)
     report_text = re.sub(r'---\n(\w)', r'---\n\n\1', report_text)
@@ -101,6 +103,7 @@ def format_report_text(report_text):
     report_text = report_text.replace('Résumé :', '\n\nRésumé :\n')
     return report_text
 
+# --- Extraction intelligente du texte (natif, OCR, fallback vision) ---
 def extract_text_with_fallback(pdf_data: bytes) -> str:
     # 1. Texte natif
     text = extract_text_from_pdf_pypdf2(pdf_data)
@@ -132,10 +135,9 @@ def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
     return "\n".join(text_content)
 
 def clean_ocr_text(ocr_text: str) -> str:
-    # Nettoie le texte pour aider GPT (optionnel mais efficace)
     ocr_text = re.sub(r' +', ' ', ocr_text)
     ocr_text = re.sub(r'\n+', '\n', ocr_text)
-    ocr_text = re.sub(r'(\w)-\n(\w)', r'\1\2', ocr_text)  # Fusionne coupures de mots
+    ocr_text = re.sub(r'(\w)-\n(\w)', r'\1\2', ocr_text)
     return ocr_text.strip()
 
 def extract_text_ocr(pdf_data: bytes) -> str:
@@ -150,7 +152,7 @@ def extract_text_ocr(pdf_data: bytes) -> str:
             img = ImageOps.autocontrast(img)
             img = img.point(lambda x: 0 if x < 160 else 255, '1')
             ocr_text = pytesseract.image_to_string(img, lang="fra")
-            print(f"\n>>> OCR PAGE {idx+1} <<<\n{ocr_text}\n---")  # Debug visuel
+            print(f"\n>>> OCR PAGE {idx+1} <<<\n{ocr_text}\n---")
             text_parts.append(ocr_text)
     except Exception as e:
         logging.error(f"Erreur d'extraction OCR : {e}")
@@ -161,7 +163,7 @@ def analyze_image_with_gpt4o(img, page=1):
     img.save(buffered, format="PNG")
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     image_url = f"data:image/png;base64,{img_base64}"
-    vision_prompt = INSTRUCTIONS  # On garde le même prompt ultra complet
+    vision_prompt = INSTRUCTIONS
     client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
     try:
         response = client.chat.completions.create(
@@ -184,7 +186,7 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
             {"role": "user", "content": pdf_text}
         ]
         response = openai.ChatCompletion.create(
-            model="gpt-4o",  # Passe systématiquement sur GPT-4o !
+            model="gpt-4o",  # SYSTÉMATIQUE : GPT-4o pour meilleure vision + qualité analyse
             messages=messages,
             temperature=0.0,
             max_tokens=3500,
@@ -194,8 +196,6 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
     except Exception as e:
         logging.error(f"Erreur ChatGPT : {e}")
         return None
-
-# ... (format_report_text et generate_pdf_in_memory inchangés) ...
 
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
@@ -249,10 +249,38 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     textobject.setFont("Helvetica", 11)
 
     y = height - y_margin
-    for line in report_text.split('\n'):
+
+    # On sépare les blocs "---" et détecte les titres à mettre en gras
+    lines = report_text.split('\n')
+    for i, line in enumerate(lines):
+        # Détecte le titre d'un point (il commence le bloc après "---")
+        is_title = False
+        if line.strip() and (
+            # Début de bloc (titre)
+            (i == 0 or (i > 0 and lines[i-1].strip() == "---")) and
+            not line.startswith("Statut") and
+            not line.startswith("Preuve") and
+            not line.startswith("Criticité") and
+            not line.startswith("Recommandation")
+        ):
+            is_title = True
+
+        # Titre "Résumé" aussi en gras
+        if line.strip().startswith("Résumé") or line.strip().startswith("- Points critiques"):
+            is_title = True
+
+        if line.strip() == "---":
+            # Ligne séparatrice plus visible
+            c.setFont("Helvetica-Bold", 11)
+            textobject.textLine("—" * 40)
+            y -= line_height
+            c.setFont("Helvetica", 11)
+            continue
+
         if line.strip() == '':
             y -= line_height // 2
             continue
+
         wrapped_lines = textwrap.wrap(line, width=max_chars_per_line, break_long_words=False, break_on_hyphens=False)
         for wrapped_line in wrapped_lines:
             if y < y_margin + line_height:
@@ -261,7 +289,12 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
                 textobject = c.beginText(x_margin, height - y_margin)
                 textobject.setFont("Helvetica", 11)
                 y = height - y_margin
-            textobject.textLine(wrapped_line)
+            if is_title:
+                c.setFont("Helvetica-Bold", 11)
+                textobject.textLine(wrapped_line)
+                c.setFont("Helvetica", 11)
+            else:
+                textobject.textLine(wrapped_line)
             y -= line_height
 
     c.drawText(textobject)
