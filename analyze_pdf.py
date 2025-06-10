@@ -9,7 +9,6 @@ from flask import Flask, request, jsonify
 
 import openai
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
