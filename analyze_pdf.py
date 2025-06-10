@@ -1,4 +1,4 @@
-import base64More actions
+import base64
 import io
 import logging
 import os
@@ -9,18 +9,40 @@ from flask import Flask, request, jsonify
 
 import openai
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"  # Adapte si besoin
 from PyPDF2 import PdfReader
 from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from PIL import ImageEnhance, ImageOps
 
+# ------------------------------------------
+# CONFIG / MAPPING / PROMPTS
+# ------------------------------------------
 
-app = Flask(__name__)
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+POINTS_CONTROLE = [
+    "Intitulé du produit",
+    "Coordonnées du fournisseur",
+    "Estampille",
+    "Présence d’une certification (VRF, VVF, BIO, VPF)",
+    "Mode de réception (Frais, Congelé)",
+    "Conditionnement / Emballage",
+    "Température",
+    "Conservation",
+    "Présence d’une DLC / DLUO",
+    "Espèce",
+    "Origine",
+    "Contaminants (1881/2006 , 2022/2388)",
+    "Corps Etranger",
+    "VSM",
+    "Aiguilles",
+    "Date du document",
+    "Composition du produit",
+    "Process",
+    "Critères Microbiologiques",
+    "Critères physico-chimiques"
+]
 
-# Optionnel : mapping pour aider GPT à comprendre les synonymes (met-le dans ton prompt)
 MAPPING_SYNONYMES = """
 Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences :
 - "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit"
@@ -35,28 +57,32 @@ Certaines informations de la fiche technique peuvent apparaître sous des intitu
 Prends-les en compte lors de l’analyse.
 """
 
-INSTRUCTIONS = f"""
-Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
-
-**POUR CHAQUE fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ORDRE, un par un, même si l’information est absente ou douteuse.**
-
+PROMPT_POINT = f"""
 {MAPPING_SYNONYMES}
+Voici le texte extrait d'une fiche technique en agroalimentaire :
 
-1. Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.
-2. Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.
-3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi.
-4. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
-5. Si tu repères une incohérence entre deux infos, signale-la.
+{{text}}
 
-**Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
-
-Format pour chaque point :
+Analyse le point de contrôle suivant : "{{point}}".
+Réponds STRICTEMENT dans ce format :
 ---
-Nom du point
+{{point}}
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication
 Recommandation : (valider, demander complément, bloquant…)
+---
+(Si tu ne trouves rien, note "Non trouvé" partout sauf Criticité/Recommandation)
+N’invente rien, sois exhaustif.
+"""
+
+RESUME_PROMPT = f"""
+{MAPPING_SYNONYMES}
+Voici un rapport qualité complet, avec un bloc d’analyse par point :
+
+{{rapport}}
+
+Sur ce rapport uniquement, produis à la fin UN SEUL résumé global exactement dans ce format :
 
 Résumé :
 - Points critiques (nombre) : [liste des points concernés]
@@ -69,58 +95,19 @@ Résumé :
 ---
 - Incohérences détectées : [liste]
 
-Voici la liste à analyser :
-1. Intitulé du produit
-2. Coordonnées du fournisseur
-3. Estampille
-4. Présence d’une certification (VRF, VVF, BIO, VPF)
-5. Mode de réception (Frais, Congelé)
-6. Conditionnement / Emballage
-7. Température
-8. Conservation
-9. Présence d’une DLC / DLUO
-10. Espèce
-11. Origine
-12. Contaminants (1881/2006 , 2022/2388)
-13. Corps Etranger
-14. VSM
-15. Aiguilles
-16. Date du document
-17. Composition du produit
-18. Process
-19. Critères Microbiologiques
-20. Critères physico-chimiques
-
-**Répète exactement ce format pour chaque point. Ne regroupe jamais plusieurs points dans un même bloc. Si un point n’a pas d’information, écris “non trouvé”.**
-**Tu ne dois jamais condenser, regrouper ou ignorer des points.**
+Répète strictement ce format. Si rien n’est à signaler dans une catégorie, liste vide.
 """
 
+# ------------------------------------------
+# FLASK APP
+# ------------------------------------------
 
-def format_report_text(report_text):
-    report_text = re.sub(r'(Recommandation\s?:[^\n]*)', r'\1\n', report_text)
-    report_text = re.sub(r'---\n(\w)', r'---\n\n\1', report_text)
-    report_text = report_text.replace('---', '---\n')
-    report_text = report_text.replace('Résumé :', '\n\nRésumé :\n')
-    return report_text
+app = Flask(__name__)
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-
-def extract_text_with_fallback(pdf_data: bytes) -> str:
-    # 1. Texte natif
-    text = extract_text_from_pdf_pypdf2(pdf_data)
-    if text.strip() and len(text) > 200:
-        print("\n>>>> TEXTE NATIF DETECTE <<<<\n", text[:600])
-        return text + "\n\n[INFO] Texte natif PDF utilisé."
-    # 2. OCR boosté
-    text = extract_text_ocr(pdf_data)
-    if text.strip():
-        print("\n>>>> OCR DETECTE <<<<\n", text[:600])
-        return text + "\n\n[INFO] OCR utilisé."
-    # 3. Fallback vision page par page
-    img_pages = convert_from_bytes(pdf_data, dpi=400)
-    vision_texts = []
-    for i, img in enumerate(img_pages):
-        vision_texts.append(analyze_image_with_gpt4o(img, page=i+1))
-    return "\n".join(vision_texts) + "\n\n[INFO] GPT-4o Vision utilisé (fallback)."
+# ------------------------------------------
+# OCR ET EXTRACTION TEXTE
+# ------------------------------------------
 
 def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
     text_content = []
@@ -135,7 +122,6 @@ def extract_text_from_pdf_pypdf2(pdf_data: bytes) -> str:
     return "\n".join(text_content)
 
 def clean_ocr_text(ocr_text: str) -> str:
-    # Nettoie le texte pour aider GPT (optionnel mais efficace)
     ocr_text = re.sub(r' +', ' ', ocr_text)
     ocr_text = re.sub(r'\n+', '\n', ocr_text)
     ocr_text = re.sub(r'(\w)-\n(\w)', r'\1\2', ocr_text)  # Fusionne coupures de mots
@@ -157,83 +143,83 @@ def extract_text_ocr(pdf_data: bytes) -> str:
             text_parts.append(ocr_text)
     except Exception as e:
         logging.error(f"Erreur d'extraction OCR : {e}")
-    img.save(buffered, format="PNG")
-    img_base64 = base64.b64encode(buffered.getvalue()).decode()
-    image_url = f"data:image/png;base64,{img_base64}"
-    vision_prompt = INSTRUCTIONS  # On garde le même prompt ultra complet
-    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": vision_prompt},
-                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}]}
-            ],
-            max_tokens=2000,
-        )
-        return f"[ANALYSE IMAGE PAGE {page}]\n" + response.choices[0].message.content.strip()
-    except Exception as e:
-        logging.error(f"Erreur Vision GPT-4o : {e}")
-        return f"[ERREUR GPT-4o Vision sur page {page}]"
+    return clean_ocr_text("\n".join(text_parts))
 
-def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
+def extract_text_with_fallback(pdf_data: bytes) -> str:
+    text = extract_text_from_pdf_pypdf2(pdf_data)
+    if text.strip() and len(text) > 200:
+        print("\n>>>> TEXTE NATIF DETECTE <<<<\n", text[:600])
+        return text + "\n\n[INFO] Texte natif PDF utilisé."
+    text = extract_text_ocr(pdf_data)
+    if text.strip():
+        print("\n>>>> OCR DETECTE <<<<\n", text[:600])
+        return text + "\n\n[INFO] OCR utilisé."
+    # En vrai, fallback vision sur chaque page possible ici si tu veux, mais rarement utile
+    return "[ERREUR] Aucun texte détecté"
+
+# ------------------------------------------
+# GPT INTERACTIONS (ANALYSE POINT PAR POINT)
+# ------------------------------------------
+
+def analyze_point(pdf_text, point):
+    prompt = PROMPT_POINT.format(text=pdf_text, point=point)
     try:
         messages = [
-            {"role": "system", "content": instructions},
-            {"role": "user", "content": pdf_text}
+            {"role": "system", "content": "Tu es un assistant expert qualité en agroalimentaire."},
+            {"role": "user", "content": prompt}
         ]
         response = openai.ChatCompletion.create(
-            model="gpt-4o",  # Passe systématiquement sur GPT-4o !
+            model="gpt-3.5-turbo",  # 4o si ça ne time plus, sinon 3.5 pour la fiabilité
             messages=messages,
             temperature=0.0,
-            max_tokens=3500,
-            request_timeout=60
+            max_tokens=600,
+            request_timeout=40
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        logging.error(f"Erreur ChatGPT : {e}")
-        return None
+        logging.error(f"Erreur analyse point {point}: {e}")
+        return f"---\n{point}\nStatut : Erreur\nPreuve : Erreur\nCriticité : Erreur\nRecommandation : Erreur\n---"
 
-# ... (format_report_text et generate_pdf_in_memory inchangés) ...
-
-@app.route('/analyze_pdf', methods=['POST'])
-def analyze_pdf():
+def generate_resume(report_text):
+    prompt = RESUME_PROMPT.format(rapport=report_text)
     try:
-        logging.info("Requête reçue dans /analyze_pdf")
-        data = request.get_json()
-        logging.info(f"Contenu reçu : {data}")
-
-        if not data or "pdf_base64" not in data:
-            logging.error("JSON invalide ou champ 'pdf_base64' manquant")
-            return jsonify({"error": "Invalid JSON body"}), 400
-
-        pdf_base64 = data["pdf_base64"]
-
-        pdf_bytes = base64.b64decode(pdf_base64)
-        logging.info(f"PDF décodé avec succès (taille : {len(pdf_bytes)} octets)")
-
-        pdf_text = extract_text_with_fallback(pdf_bytes)
-        logging.info(f"Texte extrait (ou fallback Vision) : {pdf_text[:500]}...")
-
-        report_text = analyze_text_with_chatgpt(pdf_text, INSTRUCTIONS)
-        if not report_text:
-            logging.error("L'analyse ChatGPT a échoué")
-            return jsonify({"error": "ChatGPT analysis failed"}), 500
-
-        report_text = format_report_text(report_text)
-        report_pdf_bytes = generate_pdf_in_memory(report_text)
-        logging.info(f"Rapport PDF généré (taille : {len(report_pdf_bytes)} octets)")
-
-        report_pdf_base64 = base64.b64encode(report_pdf_bytes).decode('utf-8')
-        logging.info("Réponse encodée et prête à être renvoyée")
-
-        return jsonify({
-            "report_pdf_base64": report_pdf_base64
-        }), 200
-
+        messages = [
+            {"role": "system", "content": "Tu es un expert synthèse qualité."},
+            {"role": "user", "content": prompt}
+        ]
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            temperature=0.0,
+            max_tokens=600,
+            request_timeout=40
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        logging.exception("Erreur inattendue dans /analyze_pdf")
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"Erreur synthèse finale : {e}")
+        return "Résumé indisponible."
+
+def format_report_text(report_text):
+    # Mettre en forme pour PDF (ex : titre en gras)
+    report_text = re.sub(r'(Recommandation\s?:[^\n]*)', r'\1\n', report_text)
+    report_text = re.sub(r'---\n(\w)', r'---\n\n\1', report_text)
+    report_text = report_text.replace('---', '---\n')
+    report_text = report_text.replace('Résumé :', '\n\nRésumé :\n')
+    return report_text
+
+def generate_full_report(pdf_text):
+    blocs = []
+    for idx, point in enumerate(POINTS_CONTROLE):
+        bloc = analyze_point(pdf_text, point)
+        blocs.append(bloc)
+    rapport = "\n\n".join(blocs)
+    resume = generate_resume(rapport)
+    rapport_complet = rapport + "\n\n" + resume
+    return rapport_complet
+
+# ------------------------------------------
+# PDF EN SORTIE (TITRES EN GRAS)
+# ------------------------------------------
 
 def generate_pdf_in_memory(report_text: str) -> bytes:
     buffer = io.BytesIO()
@@ -252,8 +238,8 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
         if line.strip() == '':
             y -= line_height // 2
             continue
-        # Mettre en gras les titres de points (par ex: 1. Intitulé du produit)
-        if re.match(r'^\d+\. ', line.strip()):
+        # Titres en gras (1. Intitulé du produit)
+        if re.match(r'^\d+\. ', line.strip()) or line.strip().endswith(":") or line.strip().startswith("Résumé"):
             textobject.setFont("Helvetica-Bold", 11)
             textobject.textLine(line)
             textobject.setFont("Helvetica", 11)
@@ -275,6 +261,42 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
     pdf_data = buffer.getvalue()
     buffer.close()
     return pdf_data
+
+# ------------------------------------------
+# FLASK ROUTE
+# ------------------------------------------
+
+@app.route('/analyze_pdf', methods=['POST'])
+def analyze_pdf():
+    try:
+        logging.info("Requête reçue dans /analyze_pdf")
+        data = request.get_json()
+        if not data or "pdf_base64" not in data:
+            logging.error("JSON invalide ou champ 'pdf_base64' manquant")
+            return jsonify({"error": "Invalid JSON body"}), 400
+
+        pdf_base64 = data["pdf_base64"]
+        pdf_bytes = base64.b64decode(pdf_base64)
+        logging.info(f"PDF décodé avec succès (taille : {len(pdf_bytes)} octets)")
+
+        pdf_text = extract_text_with_fallback(pdf_bytes)
+        logging.info(f"Texte extrait (ou fallback OCR) : {pdf_text[:300]}...")
+
+        report_text = generate_full_report(pdf_text)
+        report_text = format_report_text(report_text)
+        report_pdf_bytes = generate_pdf_in_memory(report_text)
+        logging.info(f"Rapport PDF généré (taille : {len(report_pdf_bytes)} octets)")
+
+        report_pdf_base64 = base64.b64encode(report_pdf_bytes).decode('utf-8')
+        logging.info("Réponse encodée et prête à être renvoyée")
+
+        return jsonify({
+            "report_pdf_base64": report_pdf_base64
+        }), 200
+
+    except Exception as e:
+        logging.exception("Erreur inattendue dans /analyze_pdf")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
