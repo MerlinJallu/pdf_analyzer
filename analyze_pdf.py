@@ -88,6 +88,10 @@ Voici la liste à analyser :
 19. Critères Microbiologiques
 20. Critères physico-chimiques
 
+**IMPORTANT :** 
+- Si l’information est “Présent” ou “Valider”, la phrase de criticité doit être positive et indiquer que l’information a bien été trouvée (ex : “Critique, car l’intitulé est essentiel pour l’identification — information bien présente.”).
+- Si l’information est “Partiel”, “Douteux” ou “Non trouvé”, explique en une phrase courte pourquoi l’absence ou la faiblesse de l’info pose problème.
+
 **Répète exactement ce format pour chaque point. Ne regroupe jamais plusieurs points dans un même bloc. Si un point n’a pas d’information, écris “non trouvé”.**
 
 **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
