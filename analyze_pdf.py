@@ -23,7 +23,7 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 MAPPING_SYNONYMES = """
 Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences à prendre en compte :
 - "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit", "Nom commercial"
-- "Estampille" : "Estampille sanitaire", "N° d’agrément", "Sanitary mark", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE"
+- "Estampille" : "Estampille sanitaire", "N° d’agrément", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE", "CE", "FR", "Numero d'agrement"
 - "Coordonnées du fournisseur" : "Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"
 - "Origine" : "Origine", "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
 - "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "DLC", "Date Durabilité", "Durée de conservation", "DLC / DDM"
