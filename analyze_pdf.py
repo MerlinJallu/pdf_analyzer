@@ -53,7 +53,7 @@ Format pour chaque point :
 
 ---
 
-**Intitulé du Produit**
+**Nom du point**
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication (uniquement si Partiel, Douteux ou Non trouvé)
@@ -72,7 +72,7 @@ Résumé :
 
 - Incohérences détectées : [liste]
 
-**N’écris jamais de résumé ou de points critiques/majeurs/mineurs après chaque point, uniquement dans ce bloc final.**
+**N’écris jamais de résumé ou de points critiques/majeurs/mineurs après chaque point, uniquement dans ce bloc final. Quand tu écris le résumé final, parcours les 20 points que tu viens d’analyser. Pour chaque point qui a le statut "Critique", "Majeur" ou "Mineur", ajoute son nom dans la liste correspondante. N’oublie aucun point, même ceux notés "Non trouvé" ou "Non concerné" s’ils ont une criticité. Le résumé doit TOUJOURS refléter exactement l’analyse faite point par point. Ne fais aucune synthèse “de mémoire” : base-toi sur ce que tu viens d’écrire.**
 
 Voici la liste à analyser :
 1. Intitulé du produit
