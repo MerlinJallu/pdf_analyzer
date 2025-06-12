@@ -48,6 +48,7 @@ Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de cont
 **Si tu repères une incohérence entre deux infos, signale-la.**
 **Pour certains points comme "Corps étranger", "VSM", "Aiguilles" : L'absence de mention signifie souvent que le risque est maîtrisé ou non concerné. Si rien n'est signalé dans la fiche, considère que c'est conforme, et indique simplement "non concerné" ou "absence attendue", et mets la recommandation "Valider", sauf si une anomalie réelle est détectée.**
 **Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
+**Des balises (entre crochets) marquent les correspondances trouvées dans le texte avec le mapping des synonymes. Utilise toujours ces balises pour repérer et relier les infos, même si la formulation est étrange ou fragmentaire.**
 
 Format pour chaque point :
 
@@ -158,6 +159,27 @@ def format_report_text(report_text):
     # Séparateurs clairs
     report_text = re.sub(r'(?<=Recommandation : .+)\n+', '\n\n' + '-'*54 + '\n', report_text)
     return report_text
+
+SYNONYMES = {
+    "Intitulé du produit": ["Dénomination légale", "Nom du produit", "Produit"],
+    "Estampille": ["Estampille sanitaire", "N° d’agrément", "Sanitary mark"],
+    "Coordonnées du fournisseur": ["Adresse fournisseur", "Nom et adresse du fabricant"],
+    "Origine": ["Origine", "Pays d’origine", "Origine viande"],
+    "DLC / DLUO": ["Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM"],
+    "Conditionnement / Emballage": ["Packaging", "Conditionnement", "Type d’emballage"],
+    "Température": ["Température de conservation", "Storage temperature"],
+    "Composition du produit": ["Ingrédients", "Ingredients"]
+    # ... ajoute tous les points
+}
+
+def tag_synonymes(text):
+    for main, synos in SYNONYMES.items():
+        for syn in synos:
+            # Ajoute un tag dans le texte OCR
+            # (Peut être un préfixe ou suffixe explicite pour aider GPT)
+            regex = re.compile(rf"\b{syn}\b", re.IGNORECASE)
+            text = regex.sub(f"[{main}]", text)
+    return text
     
 def generate_pdf_in_memory(report_text: str) -> bytes:
     buffer = io.BytesIO()
@@ -219,6 +241,7 @@ def analyze_pdf():
         pdf_base64 = data["pdf_base64"]
         pdf_bytes = base64.b64decode(pdf_base64)
         ocr_text = extract_text_ocr(pdf_bytes)
+        ocr_text = tag_synonymes(ocr_text)
         print("\n>>> TEXTE OCR POUR GPT <<<\n", ocr_text[:1200], "\n---")  # debug
         if not ocr_text.strip():
             return jsonify({"error": "OCR extraction failed"}), 500
