@@ -48,7 +48,6 @@ Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de cont
 **Si tu repères une incohérence entre deux infos, signale-la.**
 **Pour certains points comme "Corps étranger", "VSM", "Aiguilles" : L'absence de mention signifie souvent que le risque est maîtrisé ou non concerné. Si rien n'est signalé dans la fiche, considère que c'est conforme, et indique simplement "non concerné" ou "absence attendue", et mets la recommandation "Valider", sauf si une anomalie réelle est détectée.**
 **Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
-**Pour chaque point, affiche le nom du point en gras (par exemple : **Intitulé du Produit**).**
 
 Format pour chaque point :
 
@@ -144,6 +143,7 @@ def analyze_text_with_chatgpt(pdf_text: str, instructions: str) -> str:
 def format_report_text(report_text):
     # Supprime "untitled" en début de texte s'il existe
     report_text = re.sub(r'^\s*untitled\s*\n+', '', report_text, flags=re.IGNORECASE)
+    report_text = re.sub(r'^([A-Za-zéèêàâùûôîïç /,()0-9’\']{5,50})\n', r'**\1**\n', report_text, flags=re.MULTILINE)
     # Enlève les mini-résumés après chaque point, ne garde que le dernier
     points_blocs = re.split(r'(?=\d+\. )', report_text)
     if len(points_blocs) > 1:
