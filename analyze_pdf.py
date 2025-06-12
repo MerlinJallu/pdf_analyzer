@@ -52,7 +52,6 @@ Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrir
 
 Format pour chaque point :
 
----
 **Nom du point**
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
