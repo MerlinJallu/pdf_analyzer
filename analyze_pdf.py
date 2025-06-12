@@ -24,9 +24,12 @@ MAPPING_SYNONYMES = """
 Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences à prendre en compte :
 - "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit", "Nom commercial"
 - "Estampille" : "Estampille sanitaire", "N° d’agrément", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE", "CE", "FR", "Numero d'agrement"
+- "Présence d’une certification" : "VRF", "VVF", "BIO", "VPF", "VBF"
+- "Mode de réception" : "Frais", "frais", "Congele", "Congelé"
 - "Coordonnées du fournisseur" : "Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"
 - "Origine" : "Origine", "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
 - "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "DLC", "Date Durabilité", "Durée de conservation", "DLC / DDM"
+- "Contaminants" : "1881/2006" , "2022/2388", "2023/915", "1829/2003", "1830/2003"
 - "Conditionnement / Emballage" : "Packaging", "Conditionnement", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"
 - "Température" : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à", "Conditions de conservation"
 - "Composition du produit" : "Ingrédients", "Ingredients", "Composition", "Recette"
@@ -74,15 +77,15 @@ Voici la liste à analyser :
 1. Intitulé du produit
 2. Coordonnées du fournisseur
 3. Estampille
-4. Présence d’une certification (VRF, VVF, BIO, VPF)
-5. Mode de réception (Frais, Congelé)
+4. Présence d’une certification
+5. Mode de réception
 6. Conditionnement / Emballage
 7. Température
 8. Conservation
 9. Présence d’une DLC / DLUO
 10. Espèce
 11. Origine
-12. Contaminants (1881/2006 , 2022/2388)
+12. Contaminants
 13. Corps Etranger
 14. VSM
 15. Aiguilles
