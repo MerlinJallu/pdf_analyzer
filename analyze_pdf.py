@@ -64,6 +64,7 @@ Résumé :
 - Points critiques (nombre) : [liste des points concernés]
 - Points majeurs (nombre) : [liste des points concernés]
 - Points mineurs (nombre) : [liste des points concernés]
+
 - Décision recommandée : (valider / demander complément / refuser), avec OBLIGATOIREMENT une phrase explicative, constructive et professionnelle sur le niveau global de conformité, les forces du dossier et les points à compléter.
 - Incohérences détectées : [liste]
 
