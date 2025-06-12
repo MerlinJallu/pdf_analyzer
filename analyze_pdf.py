@@ -68,7 +68,7 @@ Résumé :
 
 - Points mineurs (nombre) : [liste des points concernés]
 
-- Décision recommandée : (valider / demander complément / refuser)
+- Décision recommandée : (valider / demander complément / refuser), avec OBLIGATOIREMENT une phrase explicative, constructive et professionnelle sur le niveau global de conformité, les forces du dossier et les points à compléter.
 
 - Incohérences détectées : [liste]
 
@@ -173,11 +173,13 @@ def generate_pdf_in_memory(report_text: str) -> bytes:
 
     lines = report_text.split('\n')
     for i, line in enumerate(lines):
-        # Titre des points en gras (ex: 1. Intitulé du produit)
-        if re.match(r'^\d+\.\s', line.strip()):
+    # Titre en gras détecté par markdown (ex: **Nom du point**)
+        bold_match = re.match(r'^\*\*(.+?)\*\*$', line.strip())
+        if bold_match:
+            title = bold_match.group(1)
             textobject.setFont("Helvetica-Bold", 12)
-            textobject.setFillColor(HexColor("#22325c"))  # Un bleu foncé par exemple
-            textobject.textLine(line.strip())
+            textobject.setFillColor(HexColor("#22325c"))
+            textobject.textLine(title)
             textobject.setFont("Helvetica", 11)
             textobject.setFillColor(HexColor("#000000"))
             y -= line_height
