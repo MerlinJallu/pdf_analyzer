@@ -69,6 +69,8 @@ Résumé :
 ---
 - Incohérences détectées : [liste]
 
+**N’écris jamais de résumé ou de points critiques/majeurs/mineurs après chaque point, uniquement dans ce bloc final.**
+
 Voici la liste à analyser :
 1. Intitulé du produit
 2. Coordonnées du fournisseur
