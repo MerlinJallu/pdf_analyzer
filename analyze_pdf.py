@@ -58,6 +58,7 @@ Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
 Criticité : Critique / Majeur / Mineur + explication (uniquement si Partiel, Douteux ou Non trouvé)
 Recommandation : (valider, demander complément, bloquant…)
+---
 
 Résumé :
 - Points critiques (nombre) : [liste des points concernés]
