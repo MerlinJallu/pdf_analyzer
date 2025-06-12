@@ -21,34 +21,34 @@ app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 MAPPING_SYNONYMES = """
-Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences :Add commentMore actions
-- "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit"
-- "Estampille" : "Estampille sanitaire", "N° d’agrément", "Sanitary mark"
-- "Coordonnées du fournisseur" : "Adresse fournisseur", "Nom et adresse du fabricant"
-- "Origine" : "Origine", "Pays d’origine", "Origine viande"
-- "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée"
-- "Conditionnement / Emballage" : "Packaging", "Conditionnement", "Type d’emballage"
-- "Température" : "Température de conservation", "Storage temperature"
-- "Composition du produit" : "Ingrédients", "Ingredients"
-Prends-les en compte lors de l’analyse.
+Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences à prendre en compte :
+- "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit", "Nom commercial"
+- "Estampille" : "Estampille sanitaire", "N° d’agrément", "Sanitary mark", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE"
+- "Coordonnées du fournisseur" : "Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"
+- "Origine" : "Origine", "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
+- "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "DLC", "Date Durabilité", "Durée de conservation", "DLC / DDM"
+- "Conditionnement / Emballage" : "Packaging", "Conditionnement", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"
+- "Température" : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à"
+- "Composition du produit" : "Ingrédients", "Ingredients", "Composition", "Recette"
+Prends-les en compte lors de l’analyse, même si la formulation ou l’orthographe est approximative.
 """
 
 INSTRUCTIONS = f"""
-Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de contrôle ci-dessous :
-
-**POUR CHAQUE fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ORDRE, un par un, même si l’information est absente ou douteuse.**
+Tu es un assistant expert qualité en agroalimentaire. Pour chaque fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ordre, même si l’information est absente ou douteuse.
 
 {MAPPING_SYNONYMES}
 
-**Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.**
-**Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.**
-**Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi si le point est absent, partiel ou douteux.**
-**Si le statut est "Présent", ne fais aucun commentaire négatif ou nuance sur ce point. Note simplement que l'information est bien présente, sans préciser d'imperfection, sauf si l'information semble manifestement incomplète ou douteuse.**
-**Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.**
-**Si tu repères une incohérence entre deux infos, signale-la.**
-**Pour certains points comme "Corps étranger", "VSM", "Aiguilles" : L'absence de mention signifie souvent que le risque est maîtrisé ou non concerné. Si rien n'est signalé dans la fiche, considère que c'est conforme, et indique simplement "non concerné" ou "absence attendue", et mets la recommandation "Valider", sauf si une anomalie réelle est détectée.**
-**Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
-**Des balises (entre crochets) marquent les correspondances trouvées dans le texte avec le mapping des synonymes. Utilise toujours ces balises pour repérer et relier les infos, même si la formulation est étrange ou fragmentaire.**
+**Avant d’indiquer qu’un point est "non trouvé", vérifie si des formulations approchantes, synonymes, abréviations, termes fragmentés ou mal orthographiés pourraient correspondre à l’information recherchée. Interprète largement les formulations et n’hésite pas à déduire le sens. Prends le bénéfice du doute si l’information semble présente.**
+
+Pour chaque point de contrôle :
+- Statut : Présent / Partiel / Douteux / Non trouvé
+- Preuve : (citation du texte ou “non trouvé”)
+- Criticité : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi si le point est absent, partiel ou douteux.
+- **Si le statut est "Présent", ne fais aucun commentaire négatif ou nuance sur ce point.**
+- Recommandation : Valider, Demander complément, Bloquant, etc.
+- Si tu repères une incohérence entre deux infos, signale-la.
+- Pour certains points comme "Corps étranger", "VSM", "Aiguilles" : L'absence de mention signifie souvent que le risque est maîtrisé ou non concerné. Si rien n'est signalé dans la fiche, considère que c'est conforme, et indique simplement "non concerné" ou "absence attendue", et mets la recommandation "Valider", sauf si une anomalie réelle est détectée.
+- Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.
 
 Format pour chaque point :
 
@@ -57,23 +57,19 @@ Format pour chaque point :
 **Nom du point**
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
-Criticité : Critique / Majeur / Mineur + explication (uniquement si Partiel, Douteux ou Non trouvé)
+Criticité : Critique / Majeur / Mineur + explication (si Partiel, Douteux ou Non trouvé)
 Recommandation : (valider, demander complément, bloquant…)
 
 ---
 
-Résumé :
+Résumé :
 - Points critiques (nombre) : [liste des points concernés]
-
 - Points majeurs (nombre) : [liste des points concernés]
-
 - Points mineurs (nombre) : [liste des points concernés]
-
 - Décision recommandée : (valider / demander complément / refuser), avec OBLIGATOIREMENT une phrase explicative, constructive et professionnelle sur le niveau global de conformité, les forces du dossier et les points à compléter.
-
 - Incohérences détectées : [liste]
 
-**N’écris jamais de résumé ou de points critiques/majeurs/mineurs après chaque point, uniquement dans ce bloc final. Quand tu écris le résumé final, parcours les 20 points que tu viens d’analyser. Pour chaque point qui a le statut "Critique", "Majeur" ou "Mineur", ajoute son nom dans la liste correspondante. N’oublie aucun point, même ceux notés "Non trouvé" ou "Non concerné" s’ils ont une criticité. Le résumé doit TOUJOURS refléter exactement l’analyse faite point par point. Ne fais aucune synthèse “de mémoire” : base-toi sur ce que tu viens d’écrire.**
+**N’écris jamais de résumé ou de points critiques/majeurs/mineurs après chaque point, uniquement dans ce bloc final. Quand tu écris le résumé final, parcours les 20 points que tu viens d’analyser. Pour chaque point qui a le statut "Critique", "Majeur" ou "Mineur", ajoute son nom dans la liste correspondante. N’oublie aucun point, même ceux notés "Non trouvé" ou "Non concerné" s’ils ont une criticité. Le résumé doit TOUJOURS refléter exactement l’analyse faite point par point. Ne fais aucune synthèse “de mémoire” : base-toi sur ce que tu viens d’écrire.**
 
 Voici la liste à analyser :
 1. Intitulé du produit
@@ -161,14 +157,14 @@ def format_report_text(report_text):
     return report_text
 
 SYNONYMES = {
-    "Intitulé du produit": ["Dénomination légale", "Nom du produit", "Produit"],
-    "Estampille": ["Estampille sanitaire", "N° d’agrément", "Sanitary mark"],
-    "Coordonnées du fournisseur": ["Adresse fournisseur", "Nom et adresse du fabricant"],
-    "Origine": ["Origine", "Pays d’origine", "Origine viande"],
-    "DLC / DLUO": ["Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM"],
-    "Conditionnement / Emballage": ["Packaging", "Conditionnement", "Type d’emballage"],
-    "Température": ["Température de conservation", "Storage temperature"],
-    "Composition du produit": ["Ingrédients", "Ingredients"]
+    "Intitulé du produit": ["Dénomination légale", "Nom du produit", "Produit", "Nom commercial"],
+    "Estampille": ["Estampille sanitaire", "N° d’agrément", "Sanitary mark", "Agrément sanitaire", "FR xx.xxx.xxx CE"],
+    "Coordonnées du fournisseur": ["Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"],
+    "Origine": ["Origine", "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"],
+    "DLC / DLUO": ["Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "DLC", "Date Durabilité", "Durée de conservation", "DLC / DDM"],
+    "Conditionnement / Emballage": ["Packaging", "Conditionnement", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"],
+    "Température": ["Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à"],
+    "Composition du produit": ["Ingrédients", "Ingredients", "Composition", "Recette"],
     # ... ajoute tous les points
 }
 
@@ -241,7 +237,6 @@ def analyze_pdf():
         pdf_base64 = data["pdf_base64"]
         pdf_bytes = base64.b64decode(pdf_base64)
         ocr_text = extract_text_ocr(pdf_bytes)
-        ocr_text = tag_synonymes(ocr_text)
         print("\n>>> TEXTE OCR POUR GPT <<<\n", ocr_text[:1200], "\n---")  # debug
         if not ocr_text.strip():
             return jsonify({"error": "OCR extraction failed"}), 500
