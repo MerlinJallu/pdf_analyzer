@@ -28,7 +28,7 @@ Certaines informations de la fiche technique peuvent apparaître sous des intitu
 - "Origine" : "Origine", "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
 - "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "DLC", "Date Durabilité", "Durée de conservation", "DLC / DDM"
 - "Conditionnement / Emballage" : "Packaging", "Conditionnement", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"
-- "Température" : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à"
+- "Température" : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à", "Conditions de conservation"
 - "Composition du produit" : "Ingrédients", "Ingredients", "Composition", "Recette"
 Prends-les en compte lors de l’analyse, même si la formulation ou l’orthographe est approximative.
 """
