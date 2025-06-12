@@ -9,10 +9,11 @@ from flask import Flask, request, jsonify
 
 import openai
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 from pdf2image import convert_from_bytes
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.colors import HexColor
 from PIL import ImageEnhance, ImageOps
 
 app = Flask(__name__)
@@ -40,9 +41,10 @@ Tu es un assistant expert qualité en agroalimentaire. Pour chaque point de cont
 
 1. Analyse le texte extrait de la fiche technique : dis si le point est Présent, Partiel, Douteux ou Non trouvé.
 2. Donne un exemple concret trouvé dans le texte (citation), ou “non trouvé”.
-3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi.
-4. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
-5. Si tu repères une incohérence entre deux infos, signale-la.
+3. Évalue la criticité de l’absence : Critique (bloquant la validation), Majeur (important mais non bloquant), Mineur (utile, mais non bloquant). Explique en une phrase pourquoi si le point est absent, partiel ou douteux.
+4. **Si le statut est "Présent", ne fais aucun commentaire négatif ou nuance sur ce point. Note simplement que l'information est bien présente, sans préciser d'imperfection, sauf si l'information semble manifestement incomplète ou douteuse.**
+5. Donne une recommandation ou action : Valider, Demander complément, Bloquant, etc.
+6. Si tu repères une incohérence entre deux infos, signale-la.
 
 **Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.**
 
@@ -52,7 +54,7 @@ Format pour chaque point :
 Nom du point
 Statut : Présent / Partiel / Douteux / Non trouvé
 Preuve : (citation du texte ou “non trouvé”)
-Criticité : Critique / Majeur / Mineur + explication
+Criticité : Critique / Majeur / Mineur + explication (uniquement si Partiel, Douteux ou Non trouvé)
 Recommandation : (valider, demander complément, bloquant…)
 
 Résumé :
@@ -88,12 +90,7 @@ Voici la liste à analyser :
 19. Critères Microbiologiques
 20. Critères physico-chimiques
 
-**IMPORTANT :** 
-- Si l’information est “Présent” ou “Valider”, la phrase de criticité doit être positive et indiquer que l’information a bien été trouvée (ex : “Critique, car l’intitulé est essentiel pour l’identification — information bien présente.”).
-- Si l’information est “Partiel”, “Douteux” ou “Non trouvé”, explique en une phrase courte pourquoi l’absence ou la faiblesse de l’info pose problème.
-
 **Répète exactement ce format pour chaque point. Ne regroupe jamais plusieurs points dans un même bloc. Si un point n’a pas d’information, écris “non trouvé”.**
-
 **Tu ne dois jamais condenser, regrouper ou ignorer des points.**
 """
 
