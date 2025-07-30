@@ -180,8 +180,7 @@ Recommandation : Valider | Demander complément | Bloquant
 - Points majeurs (n)  : [liste]
 - Points mineurs (n)  : [liste]
 
-- **Préconisation globale** : Valider / Demander complément / Refuser  
-  • *Commentaire humain (1–2 phrases)* résumant la décision sans répéter les points.
+- **Préconisation globale** : Valider / Demander complément / Refuser
 
 - Incohérences détectées : [liste]
 
