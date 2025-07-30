@@ -20,94 +20,173 @@ from PIL import ImageEnhance, ImageOps
 app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-MAPPING_SYNONYMES = """
-Certaines informations de la fiche technique peuvent apparaître sous des intitulés différents. Voici des équivalences à prendre en compte :
-- "Intitulé du produit" : "Dénomination légale", "Nom du produit", "Produit", "Nom commercial"
-- "Estampille" : "Estampille sanitaire", "N° d’agrément", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE", "CE", "FR", "Numero d'agrement"
-- "Présence d’une certification" : "VRF", "VVF", "BIO", "VPF", "VBF"
-- "Mode de réception" : "Frais", "frais", "Congele", "Congelé", "Présentation", "Réfrigérée", "Refrigere"
-- "Coordonnées du fournisseur" : "Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"
-- "Origine" : "Origine", "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
-- "DLC / DLUO" : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "DLC", "Date Durabilité", "Durée de conservation", "DLC / DDM"
-- "Contaminants" : "1881/2006" , "2022/2388", "2023/915", "1829/2003", "1830/2003"
-- "Conditionnement / Emballage" : "Packaging", "Conditionnement", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"
-- "Température" : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à", "Conditions de conservation"
-- "Composition du produit" : "Ingrédients", "Ingredients", "Composition", "Recette"
-Prends-les en compte lors de l’analyse, même si la formulation ou l’orthographe est approximative.
+"""
+-------------------------------------------------------------------------------
+SCRIPT D'INSTRUCTIONS GPT – ANALYSE ET VALIDATION DE FICHE TECHNIQUE PRODUIT
+-------------------------------------------------------------------------------
+Objectif : fournir au modèle GPT un prompt unique, exhaustif et **opérationnel**
+pour évaluer la conformité documentaire d'une fiche technique produit en
+agro‑alimentaire. Les exigences suivantes doivent être respectées à la lettre :
+
+• Exhaustivité – analyse systématique des 20 points de contrôle, sans omission.
+• Rigueur technique – définitions normatives, classification des risques,
+  algorithme de décision globale intégré.
+• Clarté opératoire – format de sortie strictement structuré et répétable.
+
+Ce fichier contient :
+    1. Le tableau de synonymes pour la recherche d'informations.
+    2. Les listes de points classés **Mineur / Majeur / Critique**.
+    3. Les définitions officielles des Statuts, Criticités et Recommandations.
+    4. L'algorithme de décision de la préconisation globale.
+    5. La chaîne `INSTRUCTIONS` servant de prompt au modèle GPT.
+-------------------------------------------------------------------------------
 """
 
+# ---------------------------------------------------------------------------
+# 1. TABLEAU DE SYNONYMES – DÉTECTION DES INTITULÉS APPROCHANTS
+# ---------------------------------------------------------------------------
+MAPPING_SYNONYMES = """
+Certaines informations peuvent apparaître sous des intitulés divergents.
+Reconnais les équivalences suivantes (tolère fautes d’orthographe, accents,
+abréviations et casse) :
+
+- **Intitulé du produit** : "Dénomination légale", "Nom du produit", "Nom commercial", "Produit"
+- **Estampille** : "Estampille sanitaire", "N° d’agrément", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE", "CE", "FR", "Numero d'agrement"
+- **Présence d’une certification** : "VRF", "VVF", "BIO", "VPF", "VBF"
+- **Mode de réception** : "Frais", "Congele", "Congelé", "Présentation", "Réfrigérée", "Réfrigéré", "Refrigere"
+- **Coordonnées du fournisseur** : "Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"
+- **Origine** : "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
+- **DLC / DLUO** : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "Date durabilité", "Durée de conservation", "DLC / DDM"
+- **Contaminants** : références aux règlements UE (ex. 1881/2006, 2022/2388, 2023/915, 1829/2003, 1830/2003)
+- **Conditionnement / Emballage** : "Packaging", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"
+- **Température** : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à", "Conditions de conservation"
+- **Composition du produit** : "Ingrédients", "Ingredients", "Composition", "Recette"
+
+➡️ *Toujours élargir la recherche à ces synonymes avant de conclure « non trouvé ».*
+"""
+
+# ---------------------------------------------------------------------------
+# 2. CLASSIFICATION PAR NIVEAU DE GRAVITÉ (légende réglementaire interne)
+# ---------------------------------------------------------------------------
+POINTS_MINEURS = [
+    "Intitulé du produit",
+    "Coordonnées du fournisseur",
+    "Présence d’une certification",
+    "Mode de réception",
+    "Process",
+]
+
+POINTS_MAJEURS = [
+    "Conditionnement / Emballage",
+    "Conservation",
+    "Origine",
+    "Contaminants",
+    "Date du document",
+]
+
+POINTS_CRITIQUES = [
+    "Estampille",
+    "Température",
+    "DLC / DLUO",
+    "Espèce",
+    "Corps Etranger",
+    "VSM",
+    "Aiguilles",
+    "Composition du produit",
+    "Critères Microbiologiques",
+    "Critères physico-chimiques",
+]
+
+# ---------------------------------------------------------------------------
+# 3. DÉFINITIONS OPÉRATIONNELLES
+# ---------------------------------------------------------------------------
+STATUTS = {
+    "Conforme": "Information présente, cohérente, et/ou exigence réglementaire respectée.",
+    "Douteux": "Information partielle, ambiguë, ou non vérifiable.",
+    "Non Conforme": "Information absente ou manifestement non conforme à la réglementation ou au cahier des charges.",
+}
+
+RECOMMANDATIONS = {
+    "Valider": "Aucune action requise avant approbation de la fiche.",
+    "Demander complément": "Compléter la fiche avant validation définitive.",
+    "Bloquant": "Refus immédiat tant que le point n'est pas corrigé.",
+}
+
+# ---------------------------------------------------------------------------
+# 4. ALGORITHME DE DÉCISION GLOBALE
+# ---------------------------------------------------------------------------
+"""
+Étapes (à énoncer dans le prompt) :
+1. Compter les points **critiques** manquants ou Non Conformes.
+   • Si ≥ 1 → Préconisation = Refuser.
+2. Sinon, compter les points **majeurs** manquants ou Non Conformes.
+   • Si ≥ 1 → Préconisation = Demander complément.
+3. Sinon, si un ou plusieurs points **mineurs** manquants ou Non Conformes.
+   • Préconisation = Valider (avec remarque d’amélioration).
+4. Sinon (tous points conformes) → Préconisation = Valider.
+"""
+
+# ---------------------------------------------------------------------------
+# 5. PROMPT FINAL « INSTRUCTIONS » À PASSER AU MODÈLE
+# ---------------------------------------------------------------------------
 INSTRUCTIONS = f"""
-Tu es un assistant expert qualité en agroalimentaire. Pour chaque fiche technique reçue, tu dois IMPÉRATIVEMENT analyser les 20 points de contrôle ci-dessous, dans l’ordre, même si l’information est absente ou douteuse.
+Tu es un **assistant qualité agroalimentaire** expert en réglementation européenne.
+Ta mission : contrôler une fiche technique fournisseur en appliquant le protocole
+exhaustif ci‑dessous, puis émettre une préconisation documentée.
 
 {MAPPING_SYNONYMES}
 
-**RÈGLE ABSOLUE :**
-- Si le statut d’un point est "Conforme", alors la criticité doit être vide, ou notée "Aucune" ou "RAS", et la recommandation doit être "Valider". Tu ne dois jamais écrire de remarque, nuance ou criticité sur un point "Conforme", sauf si l’information semble manifestement incomplète ou douteuse (dans ce cas, "Douteux" au lieu de "Conforme").
-- Pour tous les points marqués "Conforme", il ne doit PAS y avoir de criticité, sauf doute explicite clairement justifié.
-- Si le statut est "Non Conforme", même logique : pas de criticité, recommandation "Valider".
-- Pour les points "Non Conforme" ou "Douteux", indique la criticité adaptée avec une phrase d’explication.
+## LÉGENDE DES CRITICITÉS (colonne « Criticité »)
+- **Mineur** : {', '.join(POINTS_MINEURS)}  
+  → Absence possible sans bloquer la validation.
+- **Majeur** : {', '.join(POINTS_MAJEURS)}  
+  → Validation sous réserve d’un complément fournisseur.
+- **Critique** : {', '.join(POINTS_CRITIQUES)}  
+  → Absence d’UNE SEULE info = fiche non validable (bloquante).
 
-**RÈGLES DE LOGIQUE INCONTOURNABLES :**
-- Toujours commencer avec l'Intitulé du Produit en haut au milieu du document.
-- Toujours mettre la date du jour sur le document.
-- Si tu marques "Statut : Conforme" ou "Statut : Non Conforme", alors "Criticité" doit être vide ou "Aucune" ou "RAS", et la recommandation doit être "Valider". Il est INTERDIT d’écrire une criticité dans ces cas, sauf si tu mets "Douteux" à la place de "Conforme".
-- Si tu marques "Statut : Non Conforme" ou "Douteux", il est OBLIGATOIRE d’indiquer une criticité (Critique, Majeur, Mineur) avec une explication, et la recommandation ne doit PAS être "Valider" (mais "Demander complément" ou "Bloquant" selon la gravité).
-- Il est INTERDIT d’écrire "Criticité : Aucune" si le statut est "Non Conforme" ou "Douteux".
-- Pour "Corps étranger", "VSM", "Aiguilles" : "Conforme" = Criticité vide/Aucune et reco "Valider".
-- Ne jamais regrouper plusieurs points dans un même bloc. Pas de résumé intermédiaire.
+## STATUTS PERMIS
+- Conforme / Douteux / Non Conforme (respecter la casse et l’orthographe).
 
-**Vérifie toujours la cohérence : chaque bloc doit respecter ces règles.**
+## RÈGLES ABSOLUES INDIVIDUELLES
+1. Le document commence par **l’Intitulé du produit** (centré) + **date du jour** (JJ/MM/AAAA).
+2. Pour un point **Conforme** :
+   - Champ « Criticité » vide ou « Aucune »/« RAS ».
+   - Champ « Recommandation » = « Valider ».
+3. Pour un point **Non Conforme** ou **Douteux** :
+   - « Criticité » = Mineur / Majeur / Critique + **1 phrase explicative**.
+   - « Recommandation » = « Demander complément » (Mineur/Majeur) ou « Bloquant » (Critique).
+4. Ne jamais fusionner de points ni insérer de résumé avant la fin des 20 blocs.
+5. Pour « Corps Etranger », « VSM » et « Aiguilles » : l’absence de mention = Conforme.
 
-**Avant d’indiquer qu’un point est "non trouvé", vérifie si des formulations approchantes, synonymes, abréviations, termes fragmentés ou mal orthographiés pourraient correspondre à l’information recherchée. Interprète largement les formulations et n’hésite pas à déduire le sens. Prends le bénéfice du doute si l’information semble présente.**
-
-Pour certains points comme "Corps étranger", "VSM", "Aiguilles" : L'absence de mention signifie souvent que le risque est maîtrisé ou non concerné. Si rien n'est signalé dans la fiche, considère que c'est conforme, et indique simplement "Conforme", et mets la recommandation "Valider", sauf si une anomalie réelle est détectée.
-
-Même si la fiche ne donne AUCUNE info sur 15 points, tu dois quand même écrire un bloc “Nom du point…” pour chaque, dans l’ordre. N’arrête jamais l’analyse avant d’avoir commenté tous les points, même si tout est vide.
-
-Format pour chaque point :
-
+## FORMAT STRICT PAR POINT (copier 20×)
+```
 ---
-**Nom du point**
+**<Nom du point>**
 Statut : Conforme / Douteux / Non Conforme
-Preuve : (citation du texte ou “non trouvé”)
-Criticité : Critique / Majeur / Mineur + explication (uniquement si Douteux ou Non Conforme)
-Recommandation : (valider, demander complément, bloquant…)
+Preuve : « … » ou « non trouvé »
+Criticité : (vide) | Mineur | Majeur | Critique + explication (obligatoire si Douteux ou Non Conforme)
+Recommandation : Valider | Demander complément | Bloquant
 ---
+```
 
-Résumé :
-- Points critiques (nombre) : [liste des points concernés]
-- Points majeurs (nombre) : [liste des points concernés]
-- Points mineurs (nombre) : [liste des points concernés]
+## RÉSUMÉ FINAL (obligatoire après les 20 points)
+- Points critiques (n) : [liste]
+- Points majeurs (n) : [liste]
+- Points mineurs (n) : [liste]
 
-- Préconisation : (valider / demander complément / refuser), avec OBLIGATOIREMENT une phrase explicative, constructive et professionnelle sur le niveau global de conformité, les forces du dossier et les points à compléter.
-- Incohérences détectées : [liste]
+- **Préconisation** : Valider / Demander complément / Refuser  
+  → Formuler 1 phrase professionnelle résumant la décision au regard de l’algorithme.
+- Incohérences détectées : [liste] (ex. dates contradictoires, volume incohérent, etc.)
 
-**N’écris jamais de résumé ou de points critiques/majeurs/mineurs après chaque point, uniquement dans ce bloc final. Quand tu écris le résumé final, parcours les 20 points que tu viens d’analyser. Pour chaque point qui a le statut "Critique", "Majeur" ou "Mineur", ajoute son nom dans la liste correspondante. N’oublie aucun point, même ceux notés "Non trouvé" ou "Non concerné" s’ils ont une criticité. Le résumé doit TOUJOURS refléter exactement l’analyse faite point par point. Ne fais aucune synthèse “de mémoire” : base-toi sur ce que tu viens d’écrire.**
+## ALGORITHME DE DÉCISION
+Applique exactement la logique suivante :
+1. ≥ 1 point critique manquant ou Non Conforme → Préconisation = Refuser.
+2. Sinon, ≥ 1 point majeur manquant ou Non Conforme → Préconisation = Demander complément.
+3. Sinon, ≥ 1 point mineur manquant ou Non Conforme → Préconisation = Valider.
+4. Sinon → Valider.
 
-Voici la liste à analyser :
-1. Intitulé du produit
-2. Coordonnées du fournisseur
-3. Estampille
-4. Présence d’une certification
-5. Mode de réception
-6. Conditionnement / Emballage
-7. Température
-8. Conservation
-9. Présence d’une DLC / DLUO
-10. Espèce
-11. Origine
-12. Contaminants
-13. Corps Etranger
-14. VSM
-15. Aiguilles
-16. Date du document
-17. Composition du produit
-18. Process
-19. Critères Microbiologiques
-20. Critères physico-chimiques
-
-**Répète exactement ce format pour chaque point. Ne regroupe jamais plusieurs points dans un même bloc. Si un point n’a pas d’information, écris “Non Conforme”.**
-**Tu ne dois jamais condenser, regrouper ou ignorer des points.**
+⚠️ *Le résumé doit refléter **fidèlement** les statuts et criticités renseignés
+point par point. Aucune divergence tolérée.*
 """
 
 def extract_text_ocr(pdf_data: bytes) -> str:
