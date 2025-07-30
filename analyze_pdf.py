@@ -128,10 +128,10 @@ fournisseur en appliquant strictement les règles suivantes :
 
 ## EN‑TÊTE OBLIGATOIRE (avant les 20 points)
 ```
-====================================
-        <Intitulé du produit>
-          Date : JJ/MM/AAAA
-====================================
+                    ====================================
+                            <Intitulé du produit>
+                              Date : JJ/MM/AAAA
+                    ====================================
 ```
 *Centre le titre, puis ajoute la date du jour sous la même forme.*  
 *Ensuite seulement, enchaîne avec les 20 points d’analyse.*
