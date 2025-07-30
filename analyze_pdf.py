@@ -24,7 +24,7 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 -------------------------------------------------------------------------------
 SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
 -------------------------------------------------------------------------------
-Version : v23
+Version : v24
 Auteur  : Merlin Jallu pour l'Équipe Qualité (Bahier)
 Objet   : Prompt normatif (unique) à fournir au modèle GPT pour contrôler la
           complétude et la conformité d’une fiche technique produit
@@ -128,18 +128,23 @@ fournisseur en appliquant strictement les règles suivantes :
 {MAPPING_SYNONYMES}
 
 ## EN‑TÊTE OBLIGATOIRE (avant les 20 points)
-Le modèle doit **commencer** la réponse par ce bloc, sans AUCUN caractère
-superflu (pas de ``` ni de …) :
+Affiche en tout premier un **vrai entête centré** en Markdown/HTML :
 
-                                                                                          ========================================
-                                                                                                  <Intitulé du produit>
-                                                                                                  Date : JJ/MM/AAAA
-                                                                                          ========================================
+```html
+<div align="center">
+    <strong><Intitulé du produit></strong><br/>
+    Date : JJ/MM/AAAA
+</div>
+```
 
-*Le titre et la date sont centrés. Le bloc doit contenir exactement quatre
-lignes : traits d’égalité, titre, date, traits d’égalité. Ne jamais forcer un
-retour à la ligne à l’intérieur du titre ; s’il est long, laisse‑le entier sur
-une seule ligne.*
+*Consignes* :
+- Ne mets **aucune indentation** avant `<div>` dans la réponse finale.  
+- Utilise exactement ce gabarit (balises `<div align="center">`, `<strong>`, `<br/>`).  
+- Remplace `<Intitulé du produit>` et la date par les valeurs réelles.  
+- N’entoure **pas** le bloc d’autres backticks que ceux déjà fournis ci‑dessus.  
+- Aucune ligne de `=====` n’est plus requise.
+
+## LÉGENDE DES CRITICITÉS
 
 ## LÉGENDE DES CRITICITÉS
 - **Mineur**  : {', '.join(POINTS_MINEURS)}
