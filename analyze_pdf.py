@@ -20,25 +20,8 @@ from PIL import ImageEnhance, ImageOps
 app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-"""
--------------------------------------------------------------------------------
-SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
--------------------------------------------------------------------------------
-Version : 2025‑07‑30
-Auteur  : Équipe Qualité (FoodTech)
-Objet   : Prompt unique et normatif à fournir au modèle GPT afin de contrôler
-          la complétude et la conformité réglementaire d’une fiche technique
-          produit agro‑alimentaire.
 
-Principales garanties :
-• Couverture exhaustive des 20 points de contrôle.
-• Classification risque Mineur / Majeur / Critique fondée sur notre matrice.
-• Algorithme de décision global intégré (Valider / Demander complément / Refuser).
-• Sortie structurée, sans criticité résiduelle sur les points conformes.
-• Commentaire final "humain" (1‑2 phrases) pour faciliter la prise de décision.
--------------------------------------------------------------------------------
 """
-
 # ---------------------------------------------------------------------------
 # 1. TABLEAU DE SYNONYMES
 # ---------------------------------------------------------------------------
