@@ -24,7 +24,7 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 -------------------------------------------------------------------------------
 SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
 -------------------------------------------------------------------------------
-Version : v20
+Version : v21
 Auteur  : Merlin Jallu pour l'Équipe Qualité (Bahier)
 Objet   : Prompt normatif (unique) à fournir au modèle GPT pour contrôler la
           complétude et la conformité d’une fiche technique produit
@@ -36,7 +36,6 @@ Garanties clés :
 • Algorithme de décision globale (Valider / Demander complément / Refuser).
 • **Zéro criticité** affichée quand le point est Conforme.
 • Utilisation exclusive des statuts : « Conforme », « Douteux », « Non Conforme ».
-• Commentaire final humain (1–2 phrases) pour guider la décision.
 -------------------------------------------------------------------------------
 """
 
@@ -122,10 +121,20 @@ RECOMMANDATIONS = {
 # 5. PROMPT FINAL À FOURNIR AU MODÈLE GPT
 # ---------------------------------------------------------------------------
 INSTRUCTIONS = f"""
-Tu es un **auditeur qualité agro‑alimentaire**. Analyse la fiche technique
+Tu es un expert **auditeur qualité agro‑alimentaire**. Analyse la fiche technique
 fournisseur en appliquant strictement les règles suivantes :
 
 {MAPPING_SYNONYMES}
+
+## EN‑TÊTE OBLIGATOIRE (avant les 20 points)
+```
+====================================
+        <Intitulé du produit>
+          Date : JJ/MM/AAAA
+====================================
+```
+*Centre le titre, puis ajoute la date du jour sous la même forme.*  
+*Ensuite seulement, enchaîne avec les 20 points d’analyse.*
 
 ## LÉGENDE DES CRITICITÉS
 - **Mineur**  : {', '.join(POINTS_MINEURS)}
@@ -133,19 +142,18 @@ fournisseur en appliquant strictement les règles suivantes :
 - **Critique**: {', '.join(POINTS_CRITIQUES)}
 
 ## RÈGLES ABSOLUES (par point)
-1. Le document débute par **Intitulé du produit** (centré) + **date du jour** (JJ/MM/AAAA).
-2. Statut autorisés : **Conforme, Douteux, Non Conforme** (aucun autre terme).
-3. **NE JAMAIS** afficher « Criticité » pour un point **Conforme**.
-4. **NE JAMAIS** écrire « non trouvé » en *Statut* ; ce terme est réservé au champ **Preuve**.
+1. **Statuts autorisés** : Conforme / Douteux / Non Conforme (aucune variante).
+2. **NE JAMAIS** afficher « Criticité » pour un point **Conforme**.
+3. **NE JAMAIS** écrire « non trouvé » en *Statut* ; ce terme est réservé au champ **Preuve**.
    • Si l’information est introuvable → Statut = **Non Conforme** + Criticité adéquate.
-5. Si la Preuve contient « non trouvé », « aucune mention », « absent » ou équivalent,
+4. Si la Preuve contient « non trouvé », « aucune mention », « absent » ou équivalent,
    alors le Statut **ne peut pas** être Conforme.
-6. Pour un point **Douteux** ou **Non Conforme** :
+5. Pour un point **Douteux** ou **Non Conforme** :
    • « Criticité » obligatoire (**Mineur / Majeur / Critique**) + 1 phrase explicative.
    • « Recommandation » = « Demander complément » (Mineur/Majeur) ou « Bloquant » (Critique).
-7. Pour « Corps Etranger », « VSM » et « Aiguilles » : absence de mention = **Conforme**.
-8. Aucun résumé intermédiaire – 20 blocs séparés uniquement.
-9. Respecter EXACTEMENT l’orthographe des 20 titres fournis (ex. « Critères physico‑chimiques »).
+6. Pour « Corps Etranger », « VSM », « Aiguilles » : absence de mention = **Conforme**.
+7. Aucun résumé intermédiaire – 20 blocs séparés uniquement.
+8. Respecter EXACTEMENT l’orthographe des 20 titres fournis (ex. « Critères physico‑chimiques »).
 
 ## FORMAT PAR POINT (répéter exactement 20×) :
 ```
@@ -164,8 +172,11 @@ Recommandation : Valider | Demander complément | Bloquant
 - Points majeurs (n)  : [liste]
 - Points mineurs (n)  : [liste]
 
-- **Préconisation globale** : Valider / Demander complément / Refuser  
-  • *Commentaire humain (1–2 phrases)* résumant la décision sans répéter les points.
+---
+
+- **Préconisation globale** : Valider / Demander complément / Refuser
+
+---
 
 - Incohérences détectées : [liste]
 
@@ -177,6 +188,7 @@ Recommandation : Valider | Demander complément | Bloquant
 
 ⚠️ *Le résumé doit refléter exactement les statuts renseignés. Aucune divergence.*
 """
+
 
 def extract_text_ocr(pdf_data: bytes) -> str:
     """OCR sur chaque page du PDF via pytesseract (prétraitement pour booster la qualité)"""
