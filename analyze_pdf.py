@@ -22,33 +22,29 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 """
 -------------------------------------------------------------------------------
-SCRIPT D'INSTRUCTIONS GPT – ANALYSE ET VALIDATION DE FICHE TECHNIQUE PRODUIT
+SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
 -------------------------------------------------------------------------------
-Objectif : fournir au modèle GPT un prompt unique, exhaustif et **opérationnel**
-pour évaluer la conformité documentaire d'une fiche technique produit en
-agro‑alimentaire. Les exigences suivantes doivent être respectées à la lettre :
+Version : 2025‑07‑30
+Auteur  : Équipe Qualité (FoodTech)
+Objet   : Prompt unique et normatif à fournir au modèle GPT afin de contrôler
+          la complétude et la conformité réglementaire d’une fiche technique
+          produit agro‑alimentaire.
 
-• Exhaustivité – analyse systématique des 20 points de contrôle, sans omission.
-• Rigueur technique – définitions normatives, classification des risques,
-  algorithme de décision globale intégré.
-• Clarté opératoire – format de sortie strictement structuré et répétable.
-
-Ce fichier contient :
-    1. Le tableau de synonymes pour la recherche d'informations.
-    2. Les listes de points classés **Mineur / Majeur / Critique**.
-    3. Les définitions officielles des Statuts, Criticités et Recommandations.
-    4. L'algorithme de décision de la préconisation globale.
-    5. La chaîne `INSTRUCTIONS` servant de prompt au modèle GPT.
+Principales garanties :
+• Couverture exhaustive des 20 points de contrôle.
+• Classification risque Mineur / Majeur / Critique fondée sur notre matrice.
+• Algorithme de décision global intégré (Valider / Demander complément / Refuser).
+• Sortie structurée, sans criticité résiduelle sur les points conformes.
+• Commentaire final "humain" (1‑2 phrases) pour faciliter la prise de décision.
 -------------------------------------------------------------------------------
 """
 
 # ---------------------------------------------------------------------------
-# 1. TABLEAU DE SYNONYMES – DÉTECTION DES INTITULÉS APPROCHANTS
+# 1. TABLEAU DE SYNONYMES
 # ---------------------------------------------------------------------------
 MAPPING_SYNONYMES = """
-Certaines informations peuvent apparaître sous des intitulés divergents.
-Reconnais les équivalences suivantes (tolère fautes d’orthographe, accents,
-abréviations et casse) :
+Avant de conclure qu’une information est absente (« non trouvé »), élargis la
+recherche aux entrées suivantes (tolère fautes d’orthographe, accents, casse) :
 
 - **Intitulé du produit** : "Dénomination légale", "Nom du produit", "Nom commercial", "Produit"
 - **Estampille** : "Estampille sanitaire", "N° d’agrément", "Numéro d’agrément", "Agrément sanitaire", "FR xx.xxx.xxx CE", "CE", "FR", "Numero d'agrement"
@@ -57,16 +53,15 @@ abréviations et casse) :
 - **Coordonnées du fournisseur** : "Adresse fournisseur", "Nom et adresse du fabricant", "Fournisseur", "Nom du fabricant", "Contact", "Adresse"
 - **Origine** : "Pays d’origine", "Origine viande", "Pays de provenance", "Provenance", "Origine biologique"
 - **DLC / DLUO** : "Durée de vie", "Date limite de consommation", "Use by", "Durée étiquetée", "DDM", "Date durabilité", "Durée de conservation", "DLC / DDM"
-- **Contaminants** : références aux règlements UE (ex. 1881/2006, 2022/2388, 2023/915, 1829/2003, 1830/2003)
-- **Conditionnement / Emballage** : "Packaging", "Type d’emballage", "Type de contenant", "Colisage", "Palettisation", "Vrac", "Poids moyen", "Colis", "Unité", "Couvercle", "Carton", "Palette"
-- **Température** : "Température de conservation", "Température de stockage", "Storage temperature", "Température max", "À conserver à", "Conservation à", "Conditions de conservation"
+- **Contaminants** : Règlements UE 1881/2006, 2022/2388, 2023/915, 1829/2003, 1830/2003…
+- **Conditionnement / Emballage** : "Packaging", "Type d’emballage", "Colisage", "Palettisation", "Vrac", etc.
+- **Température** : "Température de conservation", "Storage temperature", "À conserver à",
+  "Conditions de conservation"
 - **Composition du produit** : "Ingrédients", "Ingredients", "Composition", "Recette"
-
-➡️ *Toujours élargir la recherche à ces synonymes avant de conclure « non trouvé ».*
 """
 
 # ---------------------------------------------------------------------------
-# 2. CLASSIFICATION PAR NIVEAU DE GRAVITÉ (légende réglementaire interne)
+# 2. MATRICE DE CRITICITÉ
 # ---------------------------------------------------------------------------
 POINTS_MINEURS = [
     "Intitulé du produit",
@@ -94,99 +89,86 @@ POINTS_CRITIQUES = [
     "Aiguilles",
     "Composition du produit",
     "Critères Microbiologiques",
-    "Critères physico-chimiques",
+    "Critères physico‑chimiques",
 ]
 
 # ---------------------------------------------------------------------------
-# 3. DÉFINITIONS OPÉRATIONNELLES
+# 3. DÉFINITIONS
 # ---------------------------------------------------------------------------
 STATUTS = {
-    "Conforme": "Information présente, cohérente, et/ou exigence réglementaire respectée.",
-    "Douteux": "Information partielle, ambiguë, ou non vérifiable.",
-    "Non Conforme": "Information absente ou manifestement non conforme à la réglementation ou au cahier des charges.",
+    "Conforme": "Info présente et conforme à la réglementation.",
+    "Douteux": "Info partielle, ambiguë ou non tracée.",
+    "Non Conforme": "Info absente ou non conforme.",
 }
 
 RECOMMANDATIONS = {
-    "Valider": "Aucune action requise avant approbation de la fiche.",
-    "Demander complément": "Compléter la fiche avant validation définitive.",
-    "Bloquant": "Refus immédiat tant que le point n'est pas corrigé.",
+    "Valider": "Aucune action requise avant approbation.",
+    "Demander complément": "Compléter la fiche avant validation.",
+    "Bloquant": "Refus tant que le point n'est pas corrigé.",
 }
 
 # ---------------------------------------------------------------------------
-# 4. ALGORITHME DE DÉCISION GLOBALE
+# 4. ALGORYTHME DE DÉCISION GLOBALE
 # ---------------------------------------------------------------------------
 """
-Étapes (à énoncer dans le prompt) :
-1. Compter les points **critiques** manquants ou Non Conformes.
-   • Si ≥ 1 → Préconisation = Refuser.
-2. Sinon, compter les points **majeurs** manquants ou Non Conformes.
-   • Si ≥ 1 → Préconisation = Demander complément.
-3. Sinon, si un ou plusieurs points **mineurs** manquants ou Non Conformes.
-   • Préconisation = Valider (avec remarque d’amélioration).
-4. Sinon (tous points conformes) → Préconisation = Valider.
+1. Si ≥1 **point critique** manquant / Non Conforme → Préconisation = **Refuser**.
+2. Sinon, si ≥1 **point majeur** manquant / Non Conforme → **Demander complément**.
+3. Sinon, si ≥1 **point mineur** manquant / Non Conforme → **Valider** (avec remarque).
+4. Sinon → **Valider** (aucune réserve).
 """
 
 # ---------------------------------------------------------------------------
-# 5. PROMPT FINAL « INSTRUCTIONS » À PASSER AU MODÈLE
+# 5. PROMPT FINAL À FOURNIR AU MODÈLE GPT
 # ---------------------------------------------------------------------------
 INSTRUCTIONS = f"""
-Tu es un **assistant qualité agroalimentaire** expert en réglementation européenne.
-Ta mission : contrôler une fiche technique fournisseur en appliquant le protocole
-exhaustif ci‑dessous, puis émettre une préconisation documentée.
+Tu es un **auditeur qualité agro‑alimentaire**. Analyse la fiche technique
+fournisseur en appliquant strictement les règles suivantes :
 
 {MAPPING_SYNONYMES}
 
-## LÉGENDE DES CRITICITÉS (colonne « Criticité »)
-- **Mineur** : {', '.join(POINTS_MINEURS)}  
-  → Absence possible sans bloquer la validation.
-- **Majeur** : {', '.join(POINTS_MAJEURS)}  
-  → Validation sous réserve d’un complément fournisseur.
-- **Critique** : {', '.join(POINTS_CRITIQUES)}  
-  → Absence d’UNE SEULE info = fiche non validable (bloquante).
+## LÉGENDE DES CRITICITÉS
+- **Mineur**  : {', '.join(POINTS_MINEURS)}
+- **Majeur**  : {', '.join(POINTS_MAJEURS)}
+- **Critique**: {', '.join(POINTS_CRITIQUES)}
 
-## STATUTS PERMIS
-- Conforme / Douteux / Non Conforme (respecter la casse et l’orthographe).
+## RÈGLES ABSOLUES (par point)
+1. Le document débute par **Intitulé du produit** (centré) + **date du jour** (JJ/MM/AAAA).
+2. **Ne JAMAIS** afficher « Criticité » pour un point **Conforme**.
+3. **Ne JAMAIS** écrire « non trouvé » en Preuve si le statut est **Conforme**.
+4. Pour un point **Douteux** ou **Non Conforme** :
+   • « Criticité » obligatoire (**Mineur/Majeur/Critique**) + 1 phrase explicative.
+   • « Recommandation » = « Demander complément » (Mineur/Majeur) ou « Bloquant » (Critique).
+5. Pour « Corps Etranger », « VSM », « Aiguilles » : l’absence de mention = **Conforme**.
+6. Aucun résumé intermédiaire – 20 blocs séparés uniquement.
 
-## RÈGLES ABSOLUES INDIVIDUELLES
-1. Le document commence par **l’Intitulé du produit** (centré) + **date du jour** (JJ/MM/AAAA).
-2. Pour un point **Conforme** :
-   - Champ « Criticité » vide ou « Aucune »/« RAS ».
-   - Champ « Recommandation » = « Valider ».
-3. Pour un point **Non Conforme** ou **Douteux** :
-   - « Criticité » = Mineur / Majeur / Critique + **1 phrase explicative**.
-   - « Recommandation » = « Demander complément » (Mineur/Majeur) ou « Bloquant » (Critique).
-4. Ne jamais fusionner de points ni insérer de résumé avant la fin des 20 blocs.
-5. Pour « Corps Etranger », « VSM » et « Aiguilles » : l’absence de mention = Conforme.
-
-## FORMAT STRICT PAR POINT (copier 20×)
+## FORMAT PAR POINT (répéter 20× dans l’ordre)
 ```
 ---
 **<Nom du point>**
 Statut : Conforme / Douteux / Non Conforme
-Preuve : « … » ou « non trouvé »
-Criticité : (vide) | Mineur | Majeur | Critique + explication (obligatoire si Douteux ou Non Conforme)
+Preuve : « … » | « non trouvé »
+{% if Statut in ["Douteux", "Non Conforme"] %}Criticité : Mineur | Majeur | Critique – explication{% endif %}
 Recommandation : Valider | Demander complément | Bloquant
 ---
 ```
 
-## RÉSUMÉ FINAL (obligatoire après les 20 points)
+## RÉSUMÉ FINAL (après les 20 points)
 - Points critiques (n) : [liste]
 - Points majeurs (n) : [liste]
 - Points mineurs (n) : [liste]
 
-- **Préconisation** : Valider / Demander complément / Refuser  
-  → Formuler 1 phrase professionnelle résumant la décision au regard de l’algorithme.
-- Incohérences détectées : [liste] (ex. dates contradictoires, volume incohérent, etc.)
+- **Préconisation globale** : Valider / Demander complément / Refuser  
+  – *Phrase(s) humaine(s) (1‑2 max)* résumant la décision sans répéter les points,
+    soulignant la robustesse ou les manques et la prochaine étape.
+- Incohérences détectées : [liste]
 
-## ALGORITHME DE DÉCISION
-Applique exactement la logique suivante :
-1. ≥ 1 point critique manquant ou Non Conforme → Préconisation = Refuser.
-2. Sinon, ≥ 1 point majeur manquant ou Non Conforme → Préconisation = Demander complément.
-3. Sinon, ≥ 1 point mineur manquant ou Non Conforme → Préconisation = Valider.
+## ALGORYTHME DE DÉCISION (appliquer à la lettre)
+1. ≥1 Critique manquant/Non Conforme → Refuser.
+2. Sinon, ≥1 Majeur manquant/Non Conforme → Demander complément.
+3. Sinon, ≥1 Mineur manquant/Non Conforme → Valider (avec remarque).
 4. Sinon → Valider.
 
-⚠️ *Le résumé doit refléter **fidèlement** les statuts et criticités renseignés
-point par point. Aucune divergence tolérée.*
+⚠️ *Le résumé doit refléter exactement les statuts renseignés. Aucune divergence.*
 """
 
 def extract_text_ocr(pdf_data: bytes) -> str:
