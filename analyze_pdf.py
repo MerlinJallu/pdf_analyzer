@@ -20,6 +20,24 @@ from PIL import ImageEnhance, ImageOps
 app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
+"""
+-------------------------------------------------------------------------------
+SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
+-------------------------------------------------------------------------------
+Version : v19.5
+Auteur  : Merlin Jallu pour l'Équipe Qualité (Bahier)
+Objet   : Prompt normatif à fournir au modèle GPT pour vérifier la complétude
+          et la conformité d’une fiche technique produit agro‑alimentaire.
+
+Garanties :
+• Analyse exhaustive des 20 points de contrôle.
+• Classification risque Mineur / Majeur / Critique (matrice interne).
+• Algorithme de décision globale (Valider / Demander complément / Refuser).
+• Aucune criticité affichée sur un point Conforme.
+• Commentaire final humain (1–2 phrases) pour guider la validation.
+-------------------------------------------------------------------------------
+"""
+
 # ---------------------------------------------------------------------------
 # 1. TABLEAU DE SYNONYMES
 # ---------------------------------------------------------------------------
@@ -92,10 +110,10 @@ RECOMMANDATIONS = {
 # 4. ALGORYTHME DE DÉCISION GLOBALE
 # ---------------------------------------------------------------------------
 """
-1. Si ≥1 **point critique** manquant / Non Conforme → Préconisation = **Refuser**.
-2. Sinon, si ≥1 **point majeur** manquant / Non Conforme → **Demander complément**.
-3. Sinon, si ≥1 **point mineur** manquant / Non Conforme → **Valider** (avec remarque).
-4. Sinon → **Valider** (aucune réserve).
+1. ≥ 1 point critique manquant / Non Conforme → **Refuser**.
+2. Sinon, ≥ 1 point majeur manquant / Non Conforme → **Demander complément**.
+3. Sinon, ≥ 1 point mineur manquant / Non Conforme → **Valider** (avec remarque).
+4. Sinon → **Valider**.
 """
 
 # ---------------------------------------------------------------------------
@@ -117,9 +135,9 @@ fournisseur en appliquant strictement les règles suivantes :
 2. **Ne JAMAIS** afficher « Criticité » pour un point **Conforme**.
 3. **Ne JAMAIS** écrire « non trouvé » en Preuve si le statut est **Conforme**.
 4. Pour un point **Douteux** ou **Non Conforme** :
-   • « Criticité » obligatoire (**Mineur/Majeur/Critique**) + 1 phrase explicative.
+   • « Criticité » obligatoire (**Mineur / Majeur / Critique**) + 1 phrase explicative.
    • « Recommandation » = « Demander complément » (Mineur/Majeur) ou « Bloquant » (Critique).
-5. Pour « Corps Etranger », « VSM », « Aiguilles » : l’absence de mention = **Conforme**.
+5. Pour « Corps Etranger », « VSM », « Aiguilles » : absence de mention = **Conforme**.
 6. Aucun résumé intermédiaire – 20 blocs séparés uniquement.
 
 ## FORMAT PAR POINT (répéter 20× dans l’ordre)
@@ -128,7 +146,7 @@ fournisseur en appliquant strictement les règles suivantes :
 **<Nom du point>**
 Statut : Conforme / Douteux / Non Conforme
 Preuve : « … » | « non trouvé »
-{% if Statut in ["Douteux", "Non Conforme"] %}Criticité : Mineur | Majeur | Critique – explication{% endif %}
+Criticité : (uniquement si Douteux ou Non Conforme) Mineur | Majeur | Critique – explication
 Recommandation : Valider | Demander complément | Bloquant
 ---
 ```
@@ -139,14 +157,13 @@ Recommandation : Valider | Demander complément | Bloquant
 - Points mineurs (n) : [liste]
 
 - **Préconisation globale** : Valider / Demander complément / Refuser  
-  – *Phrase(s) humaine(s) (1‑2 max)* résumant la décision sans répéter les points,
-    soulignant la robustesse ou les manques et la prochaine étape.
+  – *Commentaire humain (1–2 phrases)* pour guider la décision sans répéter les points.
 - Incohérences détectées : [liste]
 
-## ALGORYTHME DE DÉCISION (appliquer à la lettre)
-1. ≥1 Critique manquant/Non Conforme → Refuser.
-2. Sinon, ≥1 Majeur manquant/Non Conforme → Demander complément.
-3. Sinon, ≥1 Mineur manquant/Non Conforme → Valider (avec remarque).
+## ALGORYTHME DE DÉCISION (strict)
+1. ≥ 1 Critique manquant / Non Conforme → Refuser.
+2. Sinon, ≥ 1 Majeur manquant / Non Conforme → Demander complément.
+3. Sinon, ≥ 1 Mineur manquant / Non Conforme → Valider (avec remarque).
 4. Sinon → Valider.
 
 ⚠️ *Le résumé doit refléter exactement les statuts renseignés. Aucune divergence.*
