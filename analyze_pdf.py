@@ -24,17 +24,19 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 -------------------------------------------------------------------------------
 SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
 -------------------------------------------------------------------------------
-Version : v19.5
+Version : v20
 Auteur  : Merlin Jallu pour l'Équipe Qualité (Bahier)
-Objet   : Prompt normatif à fournir au modèle GPT pour vérifier la complétude
-          et la conformité d’une fiche technique produit agro‑alimentaire.
+Objet   : Prompt normatif (unique) à fournir au modèle GPT pour contrôler la
+          complétude et la conformité d’une fiche technique produit
+          agro‑alimentaire.
 
-Garanties :
-• Analyse exhaustive des 20 points de contrôle.
+Garanties clés :
+• Analyse exhaustive des 20 points de contrôle (aucune omission possible).
 • Classification risque Mineur / Majeur / Critique (matrice interne).
 • Algorithme de décision globale (Valider / Demander complément / Refuser).
-• Aucune criticité affichée sur un point Conforme.
-• Commentaire final humain (1–2 phrases) pour guider la validation.
+• **Zéro criticité** affichée quand le point est Conforme.
+• Utilisation exclusive des statuts : « Conforme », « Douteux », « Non Conforme ».
+• Commentaire final humain (1–2 phrases) pour guider la décision.
 -------------------------------------------------------------------------------
 """
 
@@ -95,9 +97,9 @@ POINTS_CRITIQUES = [
 # 3. DÉFINITIONS
 # ---------------------------------------------------------------------------
 STATUTS = {
-    "Conforme": "Info présente et conforme à la réglementation.",
-    "Douteux": "Info partielle, ambiguë ou non tracée.",
-    "Non Conforme": "Info absente ou non conforme.",
+    "Conforme": "Information présente et conforme à la réglementation.",
+    "Douteux": "Information partielle, ambiguë ou non tracée.",
+    "Non Conforme": "Information absente ou manifestement non conforme.",
 }
 
 RECOMMANDATIONS = {
@@ -132,33 +134,40 @@ fournisseur en appliquant strictement les règles suivantes :
 
 ## RÈGLES ABSOLUES (par point)
 1. Le document débute par **Intitulé du produit** (centré) + **date du jour** (JJ/MM/AAAA).
-2. **Ne JAMAIS** afficher « Criticité » pour un point **Conforme**.
-3. **Ne JAMAIS** écrire « non trouvé » en Preuve si le statut est **Conforme**.
-4. Pour un point **Douteux** ou **Non Conforme** :
+2. Statut autorisés : **Conforme, Douteux, Non Conforme** (aucun autre terme).
+3. **NE JAMAIS** afficher « Criticité » pour un point **Conforme**.
+4. **NE JAMAIS** écrire « non trouvé » en *Statut* ; ce terme est réservé au champ **Preuve**.
+   • Si l’information est introuvable → Statut = **Non Conforme** + Criticité adéquate.
+5. Si la Preuve contient « non trouvé », « aucune mention », « absent » ou équivalent,
+   alors le Statut **ne peut pas** être Conforme.
+6. Pour un point **Douteux** ou **Non Conforme** :
    • « Criticité » obligatoire (**Mineur / Majeur / Critique**) + 1 phrase explicative.
    • « Recommandation » = « Demander complément » (Mineur/Majeur) ou « Bloquant » (Critique).
-5. Pour « Corps Etranger », « VSM », « Aiguilles » : absence de mention = **Conforme**.
-6. Aucun résumé intermédiaire – 20 blocs séparés uniquement.
+7. Pour « Corps Etranger », « VSM » et « Aiguilles » : absence de mention = **Conforme**.
+8. Aucun résumé intermédiaire – 20 blocs séparés uniquement.
+9. Respecter EXACTEMENT l’orthographe des 20 titres fournis (ex. « Critères physico‑chimiques »).
 
-## FORMAT PAR POINT (répéter 20× dans l’ordre)
+## FORMAT PAR POINT (répéter exactement 20×) :
 ```
 ---
 **<Nom du point>**
 Statut : Conforme / Douteux / Non Conforme
 Preuve : « … » | « non trouvé »
-Criticité : (uniquement si Douteux ou Non Conforme) Mineur | Majeur | Critique – explication
+Criticité : <uniquement si Douteux ou Non Conforme> Mineur | Majeur | Critique – explication
 Recommandation : Valider | Demander complément | Bloquant
 ---
 ```
 
-## RÉSUMÉ FINAL (après les 20 points)
-- Points critiques (n) : [liste]
-- Points majeurs (n) : [liste]
-- Points mineurs (n) : [liste]
+## **Résumé final** (après les 20 points)
+
+- Points critiques (n) : [liste]
+- Points majeurs (n)  : [liste]
+- Points mineurs (n)  : [liste]
 
 - **Préconisation globale** : Valider / Demander complément / Refuser  
-  – *Commentaire humain (1–2 phrases)* pour guider la décision sans répéter les points.
-- Incohérences détectées : [liste]
+  • *Commentaire humain (1–2 phrases)* résumant la décision sans répéter les points.
+
+- Incohérences détectées : [liste]
 
 ## ALGORYTHME DE DÉCISION (strict)
 1. ≥ 1 Critique manquant / Non Conforme → Refuser.
