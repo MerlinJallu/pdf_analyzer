@@ -128,21 +128,16 @@ fournisseur en appliquant strictement les règles suivantes :
 {MAPPING_SYNONYMES}
 
 ## EN‑TÊTE OBLIGATOIRE (avant les 20 points)
-Affiche en tout premier un **vrai entête centré** en Markdown/HTML :
+Commence la réponse par ces **deux lignes en texte brut**, suivies d’une ligne
+vide :
 
-```html
-<div align="center">
-    <strong><Intitulé du produit></strong><br/>
-    Date : JJ/MM/AAAA
-</div>
-```
+**<Intitulé du produit>**
+Date : JJ/MM/AAAA
 
 *Consignes* :
-- Ne mets **aucune indentation** avant `<div>` dans la réponse finale.  
-- Utilise exactement ce gabarit (balises `<div align="center">`, `<strong>`, `<br/>`).  
-- Remplace `<Intitulé du produit>` et la date par les valeurs réelles.  
-- N’entoure **pas** le bloc d’autres backticks que ceux déjà fournis ci‑dessus.  
-- Aucune ligne de `=====` n’est plus requise.
+- Aucun code HTML ni Markdown de bloc ; juste les deux lignes ci‑dessus.  
+- Laisse une ligne vide après pour aérer avant le premier point.  
+- Remplace bien sûr le titre et la date par les valeurs réelles.
 
 ## LÉGENDE DES CRITICITÉS
 
