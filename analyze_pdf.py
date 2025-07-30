@@ -24,7 +24,7 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 -------------------------------------------------------------------------------
 SCRIPT D'INSTRUCTIONS GPT – ANALYSE & VALIDATION FICHE TECHNIQUE PRODUIT
 -------------------------------------------------------------------------------
-Version : v22
+Version : v23
 Auteur  : Merlin Jallu pour l'Équipe Qualité (Bahier)
 Objet   : Prompt normatif (unique) à fournir au modèle GPT pour contrôler la
           complétude et la conformité d’une fiche technique produit
@@ -128,14 +128,18 @@ fournisseur en appliquant strictement les règles suivantes :
 {MAPPING_SYNONYMES}
 
 ## EN‑TÊTE OBLIGATOIRE (avant les 20 points)
-Affiche‑le **sans balises de code (` ``` ` )** :
-```
-                                                  ====================================
-                                                          <Intitulé du produit>
-                                                          Date : JJ/MM/AAAA
-                                                  ====================================
-```
-*Le titre et la date doivent être centrés visuellement. Supprime les backticks dans la réponse finale ; ils ne servent qu’à illustrer ici.*
+Le modèle doit **commencer** la réponse par ce bloc, sans AUCUN caractère
+superflu (pas de ``` ni de …) :
+
+                                                                                          ========================================
+                                                                                                  <Intitulé du produit>
+                                                                                                  Date : JJ/MM/AAAA
+                                                                                          ========================================
+
+*Le titre et la date sont centrés. Le bloc doit contenir exactement quatre
+lignes : traits d’égalité, titre, date, traits d’égalité. Ne jamais forcer un
+retour à la ligne à l’intérieur du titre ; s’il est long, laisse‑le entier sur
+une seule ligne.*
 
 ## LÉGENDE DES CRITICITÉS
 - **Mineur**  : {', '.join(POINTS_MINEURS)}
@@ -189,7 +193,6 @@ Recommandation : Valider | Demander complément | Bloquant
 
 ⚠️ *Le résumé doit refléter exactement les statuts renseignés. Aucune divergence.*
 """
-
 
 def extract_text_ocr(pdf_data: bytes) -> str:
     """OCR sur chaque page du PDF via pytesseract (prétraitement pour booster la qualité)"""
