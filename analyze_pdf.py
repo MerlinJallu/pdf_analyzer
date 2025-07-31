@@ -132,7 +132,7 @@ Commence la réponse par ces **deux lignes en texte brut**, suivies d’une lign
 vide :
 
 **<Intitulé du produit>**
-Date : JJ/MM/AAAA
+Date du jour : JJ/MM/AAAA
 
 *Consignes* :
 - Aucun code HTML ni Markdown de bloc ; juste les deux lignes ci‑dessus.  
