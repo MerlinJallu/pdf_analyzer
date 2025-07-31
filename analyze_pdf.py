@@ -168,7 +168,7 @@ Date du jour : JJ/MM/AAAA
 ---
 **<Nom du point>**
 Statut : Conforme / Douteux / Non Conforme
-Preuve : « … » | « non trouvé »
+Preuve : 
 Criticité : <uniquement si Douteux ou Non Conforme> Mineur | Majeur | Critique – explication
 Recommandation : Valider | Demander complément | Bloquant
 ---
